@@ -122,7 +122,9 @@ export class BotDurableObject {
         const enc = new TextEncoder();
         const send = (o) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
         try {
-          let reply = await this.runAgent(userMessage, history);
+          // Pass the send function into runAgent so it can stream status updates
+          let reply = await this.runAgent(userMessage, history, send);
+          
           for (let i = 0; i < reply.length; i += 60) {
             send({ type: "delta", text: reply.slice(i, i + 60) });
           }
@@ -141,7 +143,7 @@ export class BotDurableObject {
     });
   }
 
-  async runAgent(userMessage, history) {
+  async runAgent(userMessage, history, send) {
     const memory = (await this.ctx.storage.get("memory")) || [];
     const system = `You are "${this.name}", an autonomous AI worker.
 Instructions: ${this.instructions}
@@ -171,7 +173,13 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       const toolCall = this.parseTool(raw);
       if (!toolCall) break;
       
+      // Stream the thought process to the UI
+      send({ type: "status", text: `Using tool: ${toolCall.tool} -> ${JSON.stringify(toolCall).slice(0, 80)}...` });
+      
       const result = await this.runTool(toolCall);
+      
+      send({ type: "status", text: `Tool result: ${result.slice(0, 100)}...` });
+      
       messages.push({ role: "assistant", content: raw });
       messages.push({ role: "user", content: `Tool result: ${result}` });
       raw = await this.askBrain(messages);
@@ -339,7 +347,7 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
   async alarm() {
     const task = (await this.ctx.storage.get("scheduledTask")) || "wake up and continue your research";
     const history = (await this.ctx.storage.get("history")) || [];
-    const reply = await this.runAgent(`Scheduled task: ${task}`, history);
+    const reply = await this.runAgent(`Scheduled task: ${task}`, history, () => {});
     history.push({ role: "assistant", content: `[scheduled] ${reply}`, ts: Date.now() });
     await this.ctx.storage.put("history", history.slice(-40));
     await this.ctx.storage.delete("scheduledTask");
