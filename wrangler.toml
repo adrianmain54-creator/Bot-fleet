@@ -1,0 +1,17 @@
+name = "grok-bot-fleet"
+main = "src/index.js"
+compatibility_date = "2026-01-01"
+
+[[durable_objects.bindings]]
+name = "BOT"
+class_name = "BotDurableObject"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["BotDurableObject"]
+
+[ai]
+binding = "AI"
+
+[vars]
+BRAIN = "workers-ai"
