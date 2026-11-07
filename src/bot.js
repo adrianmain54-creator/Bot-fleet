@@ -10,17 +10,30 @@ export class BotDurableObject {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    if (path === "/init") {
-      const { name, instructions } = await request.json();
-      this.name = name;
-      this.instructions = instructions || "You are a helpful autonomous research bot.";
-      await this.ctx.storage.put("name", this.name);
-      await this.ctx.storage.put("instructions", this.instructions);
-      return new Response("ok");
-    }
-
+    // --- REGISTRY LOGIC ---
     if (path === "/list") {
       const reg = (await this.ctx.storage.get("registry")) || [];
+      return Response.json(reg);
+    }
+
+    if (path === "/ensure_defaults") {
+      const reg = (await this.ctx.storage.get("registry")) || [];
+      if (reg.length === 0) {
+        const defaults = [
+          { name: "chief", instructions: "You are the Chief of Staff. Your job is to manage tasks, assign jobs to specialists using the message_bot tool, and summarize results for Aoid. You do not do heavy research yourself. If Aoid asks for something, figure out if you need the researcher or writer, message them, wait for their reply, and then give Aoid the final answer." },
+          { name: "researcher", instructions: "You are the Researcher. You only use the search and fetch tools to find facts. When the Chief messages you, do the research and reply with your findings." },
+          { name: "writer", instructions: "You are the Writer. You take raw research and turn it into clean, well-formatted reports. When the Chief messages you with research, write the report and reply." }
+        ];
+        for (const bot of defaults) {
+          const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
+          await stub.fetch(new Request("https://bot/init", {
+            method: "POST",
+            body: JSON.stringify(bot)
+          }));
+        }
+        await this.ctx.storage.put("registry", defaults);
+        return Response.json(defaults);
+      }
       return Response.json(reg);
     }
 
@@ -32,6 +45,42 @@ export class BotDurableObject {
         await this.ctx.storage.put("registry", reg);
       }
       return Response.json({ ok: true });
+    }
+
+    if (path === "/add_job") {
+      const job = await request.json();
+      const jobs = (await this.ctx.storage.get("jobs")) || [];
+      job.id = Date.now().toString();
+      job.status = job.status || "pending";
+      jobs.push(job);
+      await this.ctx.storage.put("jobs", jobs);
+      return Response.json({ ok: true, job });
+    }
+
+    if (path === "/list_jobs") {
+      const jobs = (await this.ctx.storage.get("jobs")) || [];
+      return Response.json(jobs);
+    }
+
+    if (path === "/update_job") {
+      const { id, status } = await request.json();
+      const jobs = (await this.ctx.storage.get("jobs")) || [];
+      const job = jobs.find(j => j.id === id);
+      if (job) {
+        job.status = status;
+        await this.ctx.storage.put("jobs", jobs);
+      }
+      return Response.json({ ok: true });
+    }
+    // ----------------------------------------
+
+    if (path === "/init") {
+      const { name, instructions } = await request.json();
+      this.name = name;
+      this.instructions = instructions || "You are a helpful autonomous research bot.";
+      await this.ctx.storage.put("name", this.name);
+      await this.ctx.storage.put("instructions", this.instructions);
+      return new Response("ok");
     }
 
     if (!this.name) {
@@ -83,14 +132,19 @@ export class BotDurableObject {
 
   async runAgent(userMessage, history) {
     const memory = (await this.ctx.storage.get("memory")) || [];
-    const system = `You are "${this.name}", an autonomous AI worker with your own cloud computer.
+    const system = `You are "${this.name}", an autonomous AI worker.
 Instructions: ${this.instructions}
 You have these tools (call one by replying with ONLY a JSON object and nothing else):
 - {"tool":"search","query":"..."} — search the web
 - {"tool":"fetch","url":"..."} — read a webpage
-- {"tool":"remember","note":"..."} — save a fact to long-term memory
+- {"tool":"remember","note":"..."} — save a fact to memory
 - {"tool":"recall"} — list memory
 - {"tool":"schedule","when":"ISO date","task":"..."} — schedule a future task
+- {"tool":"add_job","title":"...","description":"...","assigned_to":"..."} — add a task to the board
+- {"tool":"list_jobs"} — see all tasks on the board
+- {"tool":"update_job","id":"...","status":"done|in_progress"} — update a task
+- {"tool":"message_bot","target":"bot_name","message":"..."} — send a message to another bot and wait for their reply
+
 If no tool is needed, just answer normally in plain text (no JSON).
 Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
 
@@ -102,9 +156,10 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
 
     let raw = await this.askBrain(messages);
 
-    for (let i = 0; i < 3; i++) {
+    for (let i = 0; i < 4; i++) {
       const toolCall = this.parseTool(raw);
       if (!toolCall) break;
+      
       const result = await this.runTool(toolCall);
       messages.push({ role: "assistant", content: raw });
       messages.push({ role: "user", content: `Tool result: ${result}` });
@@ -181,6 +236,65 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       return `scheduled for ${new Date(when).toISOString()}`;
     }
 
+    if (tool === "add_job") {
+      const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
+      await reg.fetch(new Request("https://registry/add_job", {
+        method: "POST",
+        body: JSON.stringify({
+          title: args.title || "Untitled Job",
+          description: args.description || "",
+          assigned_to: args.assigned_to || "unassigned",
+          creator: this.name
+        })
+      }));
+      return "job added to board";
+    }
+
+    if (tool === "list_jobs") {
+      const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
+      const res = await reg.fetch(new Request("https://registry/list_jobs"));
+      const jobs = await res.json();
+      if (!jobs.length) return "job board is empty";
+      return jobs.map(j => `[ID: ${j.id}] ${j.title} (Assigned to: ${j.assigned_to}, Status: ${j.status})`).join("\n");
+    }
+
+    if (tool === "update_job") {
+      const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
+      await reg.fetch(new Request("https://registry/update_job", {
+        method: "POST",
+        body: JSON.stringify({ id: args.id, status: args.status })
+      }));
+      return "job updated";
+    }
+
+    if (tool === "message_bot") {
+      if (args.target === this.name) return "You cannot message yourself.";
+      const targetStub = this.env.BOT.get(this.env.BOT.idFromName(args.target));
+      
+      const res = await targetStub.fetch(new Request("https://bot/message", {
+        method: "POST",
+        body: JSON.stringify({ message: `[Message from ${this.name}]: ${args.message}` })
+      }));
+      
+      const reader = res.body.getReader();
+      const dec = new TextDecoder();
+      let buf = '', reply = '';
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split('\n'); buf = lines.pop();
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            const o = JSON.parse(line);
+            if (o.type === 'delta') reply += o.text;
+          } catch {}
+        }
+      }
+      return reply || "They didn't reply with anything.";
+    }
+
     return "unknown tool";
   }
 
@@ -204,7 +318,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       return data.choices[0].message.content;
     }
     
-    // This is the line that got updated
     const res = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
       messages,
       max_tokens: 800,
