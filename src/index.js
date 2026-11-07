@@ -8,7 +8,7 @@ export default {
 
     if (url.pathname === "/api/bots" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      return reg.fetch(new Request("https://registry/list"));
+      return reg.fetch(new Request("https://registry/ensure_defaults"));
     }
 
     if (url.pathname === "/api/bots" && request.method === "POST") {
@@ -25,6 +25,11 @@ export default {
         body: JSON.stringify({ name, instructions }),
       }));
       return Response.json({ ok: true });
+    }
+
+    if (url.pathname === "/api/jobs" && request.method === "GET") {
+      const reg = env.BOT.get(env.BOT.idFromName("registry"));
+      return reg.fetch(new Request("https://registry/list_jobs"));
     }
 
     const botMatch = url.pathname.match(/^\/api\/bot\/([^/]+)\/(.+)$/);
@@ -66,6 +71,9 @@ header button{margin-left:auto;background:none;border:1px solid var(--line);colo
 .bot-card strong{font-size:15px}
 .bot-card .sub{color:var(--dim);font-size:13px;margin-top:2px}
 .bot-card button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600}
+.job-card{background:#0a0a0a;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;font-size:14px}
+.job-card strong{color:var(--accent);display:block;margin-bottom:4px}
+.job-card .meta{color:var(--dim);font-size:12px;margin-top:6px}
 #chat{display:none;flex-direction:column;height:100%}
 #log{flex:1;overflow-y:auto;padding:14px 16px 8px;display:flex;flex-direction:column;gap:10px}
 .msg{max-width:92%;word-wrap:break-word;padding:10px 14px;border-radius:16px;white-space:pre-wrap}
@@ -82,6 +90,9 @@ header button{margin-left:auto;background:none;border:1px solid var(--line);colo
 .cursor:after{content:"▋";color:var(--dim);animation:b 1s steps(2) infinite}
 @keyframes b{50%{opacity:0}}
 .back{background:none;border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:6px 10px;font-size:13px}
+.tabs{display:flex;gap:8px;margin-bottom:14px}
+.tabs button{flex:1;background:#0d0d0d;border:1px solid var(--line);color:var(--fg);padding:8px;border-radius:8px;font-weight:600;font-size:13px}
+.tabs button.active{background:var(--accent);border-color:var(--accent);color:#fff}
 </style>
 </head>
 <body>
@@ -90,7 +101,13 @@ header button{margin-left:auto;background:none;border:1px solid var(--line);colo
   <div class="pill">free</div>
   <button id="newBtn">+ new bot</button>
 </header>
-<div id="main"><div id="list"></div></div>
+<div id="main">
+  <div class="tabs">
+    <button id="tabBots" class="active" onclick="switchTab('bots')">Bots</button>
+    <button id="tabJobs" onclick="switchTab('jobs')">Job Board</button>
+  </div>
+  <div id="list"></div>
+</div>
 <div id="chat">
   <header>
     <button class="back" id="backBtn">← back</button>
@@ -105,6 +122,8 @@ header button{margin-left:auto;background:none;border:1px solid var(--line);colo
 <script>
 const $ = s => document.querySelector(s);
 let currentBot = null;
+let currentTab = 'bots';
+let hasAutoOpened = false;
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -112,13 +131,36 @@ async function api(path, opts) {
   return r.headers.get('content-type')?.includes('json') ? r.json() : r.text();
 }
 
-async function loadList() {
+function switchTab(tab) {
+  currentTab = tab;
+  $('#tabBots').className = tab === 'bots' ? 'active' : '';
+  $('#tabJobs').className = tab === 'jobs' ? 'active' : '';
+  if (tab === 'bots') loadBots(); else loadJobs();
+}
+
+async function loadBots() {
   const bots = await api('/api/bots');
   $('#list').innerHTML = bots.length ? bots.map(b => \`
     <div class="bot-card">
       <div><strong>\${b.name}</strong><div class="sub">\${(b.instructions||'no instructions').slice(0,60)}</div></div>
       <button onclick="openBot('\${b.name}')">open</button>
     </div>\`).join('') : '<p style="color:var(--dim);text-align:center;margin-top:40px">No bots yet. Tap "+ new bot".</p>';
+    
+  // Auto-open Chief on first load
+  if (!hasAutoOpened && bots.find(b => b.name === 'chief')) {
+    hasAutoOpened = true;
+    openBot('chief');
+  }
+}
+
+async function loadJobs() {
+  const jobs = await api('/api/jobs');
+  $('#list').innerHTML = jobs.length ? jobs.map(j => \`
+    <div class="job-card">
+      <strong>\${j.title}</strong>
+      \${j.description || ''}
+      <div class="meta">Assigned: \${j.assigned_to} | Status: \${j.status} | By: \${j.creator}</div>
+    </div>\`).join('') : '<p style="color:var(--dim);text-align:center;margin-top:40px">Job board is empty.</p>';
 }
 
 async function openBot(name) {
@@ -202,7 +244,7 @@ $('#backBtn').onclick = () => {
   currentBot = null;
   $('#chat').style.display = 'none';
   $('#main').style.display = 'block';
-  loadList();
+  if(currentTab === 'bots') loadBots(); else loadJobs();
 };
 $('#newBtn').onclick = async () => {
   const name = prompt('Bot name (no spaces):');
@@ -213,10 +255,10 @@ $('#newBtn').onclick = async () => {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name, instructions }),
   });
-  loadList();
+  loadBots();
 };
 window.openBot = openBot;
-loadList();
+switchTab('bots');
 </script>
 </body>
 </html>`;
