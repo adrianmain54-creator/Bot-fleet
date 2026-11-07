@@ -192,6 +192,10 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       }
       
       raw = await this.askBrain(messages);
+      if (!raw || typeof raw !== 'string') {
+         raw = "I experienced an internal error generating a response.";
+         break;
+      }
     }
 
     if (raw.trim().startsWith('{"tool"')) {
@@ -202,6 +206,7 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
   }
 
   parseTool(text) {
+    if (typeof text !== 'string') return null;
     try {
       let clean = text.trim();
       if (clean.startsWith('```')) {
@@ -474,30 +479,38 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
   }
 
   async askBrain(messages) {
-    if (this.env.BRAIN === "groq" && this.env.GROQ_API_KEY) {
-      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          authorization: "Bearer " + this.env.GROQ_API_KEY,
-        },
-        body: JSON.stringify({
-          model: "llama-3.3-70b-versatile",
-          messages,
-          temperature: 0.7,
-          max_tokens: 800,
-        }),
+    try {
+      if (this.env.BRAIN === "groq" && this.env.GROQ_API_KEY) {
+        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            authorization: "Bearer " + this.env.GROQ_API_KEY,
+          },
+          body: JSON.stringify({
+            model: "llama-3.3-70b-versatile",
+            messages,
+            temperature: 0.7,
+            max_tokens: 800,
+          }),
+        });
+        if (!res.ok) throw new Error("groq: " + (await res.text()).slice(0, 200));
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content || "";
+      }
+      
+      const res = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
+        messages,
+        max_tokens: 800,
       });
-      if (!res.ok) throw new Error("groq: " + (await res.text()).slice(0, 200));
-      const data = await res.json();
-      return data.choices[0].message.content;
+      
+      if (typeof res === 'string') return res;
+      if (res && typeof res.response === 'string') return res.response;
+      
+      return JSON.stringify(res);
+    } catch (e) {
+      return "Brain Error: " + e.message;
     }
-    
-    const res = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
-      messages,
-      max_tokens: 800,
-    });
-    return res.response;
   }
 
   async alarm() {
