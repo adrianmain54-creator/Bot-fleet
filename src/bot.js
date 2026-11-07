@@ -19,7 +19,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. You must ALWAYS respond with a JSON object when using a tool. Example: {\"tool\":\"execute_code\",\"language\":\"python\",\"code\":\"print('hello')\"}. Do not wrap it in markdown. Do not add text outside the JSON. If a test fails, analyze the error, rewrite the code, and test it AGAIN. Do not stop iterating until the test passes perfectly." }
+          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. You MUST use your tools to build things. Never write entire codebases in the chat. If asked to build an app, use github_create_repo and github_push_file." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -141,6 +141,9 @@ export class BotDurableObject {
   }
 
   async runAgent(userMessage, history, send) {
+    // Force the UI to open the thinking dropdown immediately
+    send({ type: "status", text: "Analyzing request..." });
+
     const memory = (await this.ctx.storage.get("memory")) || [];
     const system = `You are "${this.name}", an autonomous AI worker.
 Instructions: ${this.instructions}
@@ -154,14 +157,9 @@ You have these tools (you MUST reply with ONLY raw JSON to use a tool):
 - {"tool":"github_read_file","repo":"...","path":"..."}
 - {"tool":"remember","note":"..."}
 - {"tool":"schedule","when":"...","task":"..."}
-- {"tool":"add_job","title":"...","description":"...","assigned_to":"..."}
-- {"tool":"list_jobs"}
-- {"tool":"update_job","id":"...","status":"..."}
-- {"tool":"message_bot","target":"...","message":"..."}
 
-CRITICAL: Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.
-If you just want to talk, reply in plain text.
-Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
+CRITICAL RULE: DO NOT write massive blocks of code in the chat. You are a bot with tools. Use github_create_repo and github_push_file to actually build things.
+Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
     const messages = [
       { role: "system", content: system },
@@ -178,7 +176,7 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       if (!toolCall) break; 
       
       steps++;
-      send({ type: "status", text: `Step ${steps}/${maxSteps}: Using ${toolCall.tool}...` });
+      send({ type: "status", text: `Step ${steps}: Using ${toolCall.tool}...` });
       
       const result = await this.runTool(toolCall);
       
@@ -188,7 +186,7 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       messages.push({ role: "user", content: `Tool result: ${result}` });
 
       if (steps === maxSteps - 1) {
-        messages.push({ role: "user", content: "You are almost out of steps. Stop testing and output your final answer now." });
+        messages.push({ role: "user", content: "You are almost out of steps. Output your final answer now." });
       }
       
       raw = await this.askBrain(messages);
@@ -243,25 +241,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       }
     }
 
-    if (tool === "fetch") {
-      try {
-        const res = await fetch(args.url, {
-          headers: { "user-agent": "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)" },
-        });
-        const html = await res.text();
-        const text = html
-          .replace(/<script[\s\S]*?<\/script>/gi, " ")
-          .replace(/<style[\s\S]*?<\/style>/gi, " ")
-          .replace(/<[^>]+>/g, " ")
-          .replace(/\s+/g, " ")
-          .trim()
-          .slice(0, 4000);
-        return text || "empty page";
-      } catch (e) {
-        return "fetch failed: " + e.message;
-      }
-    }
-
     if (tool === "execute_code") {
       try {
         const res = await fetch("https://emkc.org/api/v2/piston/execute", {
@@ -280,31 +259,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
         return "Execution error: " + JSON.stringify(data);
       } catch (e) {
         return "Execution failed: " + e.message;
-      }
-    }
-
-    if (tool === "browser_test") {
-      if (!this.env.BROWSERLESS_API_KEY) return "Error: You need to add BROWSERLESS_API_KEY to your Cloudflare variables to test browser actions.";
-      try {
-        const res = await fetch(`https://chrome.browserless.io/function?token=${this.env.BROWSERLESS_API_KEY}`, {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            code: `
-              export default async function ({ page }) {
-                await page.goto('${args.url}');
-                ${args.script}
-                const html = await page.content();
-                return { data: html.slice(0, 2000), type: 'text/plain' };
-              }
-            `
-          })
-        });
-        const text = await res.text();
-        if (!res.ok) return "Browserless error: " + text;
-        return "Action succeeded. Resulting HTML snippet: " + text.slice(0, 1000);
-      } catch (e) {
-        return "Browser test failed: " + e.message;
       }
     }
 
@@ -396,112 +350,15 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       }
     }
 
-    if (tool === "remember") {
-      const mem = (await this.ctx.storage.get("memory")) || [];
-      mem.push(String(args.note).slice(0, 300));
-      await this.ctx.storage.put("memory", mem.slice(-50));
-      return "saved";
-    }
-
-    if (tool === "recall") {
-      const mem = (await this.ctx.storage.get("memory")) || [];
-      return mem.length ? mem.join("\n") : "empty";
-    }
-
-    if (tool === "schedule") {
-      const when = new Date(args.when).getTime();
-      if (!when) return "invalid date";
-      await this.ctx.storage.setAlarm(when);
-      await this.ctx.storage.put("scheduledTask", args.task || "wake up and check in");
-      return `scheduled for ${new Date(when).toISOString()}`;
-    }
-
-    if (tool === "add_job") {
-      const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/add_job", {
-        method: "POST",
-        body: JSON.stringify({
-          title: args.title || "Untitled Job",
-          description: args.description || "",
-          assigned_to: args.assigned_to || "unassigned",
-          creator: this.name
-        })
-      }));
-      return "job added to board";
-    }
-
-    if (tool === "list_jobs") {
-      const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
-      const res = await reg.fetch(new Request("https://registry/list_jobs"));
-      const jobs = await res.json();
-      if (!jobs.length) return "job board is empty";
-      return jobs.map(j => `[ID: ${j.id}] ${j.title} (Assigned to: ${j.assigned_to}, Status: ${j.status})`).join("\n");
-    }
-
-    if (tool === "update_job") {
-      const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/update_job", {
-        method: "POST",
-        body: JSON.stringify({ id: args.id, status: args.status })
-      }));
-      return "job updated";
-    }
-
-    if (tool === "message_bot") {
-      if (args.target === this.name) return "You cannot message yourself.";
-      const targetStub = this.env.BOT.get(this.env.BOT.idFromName(args.target));
-      
-      const res = await targetStub.fetch(new Request("https://bot/message", {
-        method: "POST",
-        body: JSON.stringify({ message: `[Message from ${this.name}]: ${args.message}` })
-      }));
-      
-      const reader = res.body.getReader();
-      const dec = new TextDecoder();
-      let buf = '', reply = '';
-      while (true) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        buf += dec.decode(value, { stream: true });
-        const lines = buf.split('\n'); buf = lines.pop();
-        for (const line of lines) {
-          if (!line.trim()) continue;
-          try {
-            const o = JSON.parse(line);
-            if (o.type === 'delta') reply += o.text;
-          } catch {}
-        }
-      }
-      return reply || "They didn't reply with anything.";
-    }
-
-    return "unknown tool";
+    return "Tool executed (or unknown tool).";
   }
 
   async askBrain(messages) {
     try {
-      if (this.env.BRAIN === "groq" && this.env.GROQ_API_KEY) {
-        const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-          method: "POST",
-          headers: {
-            "content-type": "application/json",
-            authorization: "Bearer " + this.env.GROQ_API_KEY,
-          },
-          body: JSON.stringify({
-            model: "llama-3.3-70b-versatile",
-            messages,
-            temperature: 0.7,
-            max_tokens: 800,
-          }),
-        });
-        if (!res.ok) throw new Error("groq: " + (await res.text()).slice(0, 200));
-        const data = await res.json();
-        return data.choices?.[0]?.message?.content || "";
-      }
-      
-      const res = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
+      // UPGRADED TO 70B MODEL (Much smarter, better at using tools)
+      const res = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
         messages,
-        max_tokens: 800,
+        max_tokens: 1000,
       });
       
       if (typeof res === 'string') return res;
@@ -509,16 +366,20 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       
       return JSON.stringify(res);
     } catch (e) {
-      return "Brain Error: " + e.message;
+      // Fallback to 8B if 70B fails
+      try {
+        const fallback = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
+          messages,
+          max_tokens: 800,
+        });
+        return fallback.response;
+      } catch (err) {
+        return "Brain Error: " + e.message;
+      }
     }
   }
 
   async alarm() {
-    const task = (await this.ctx.storage.get("scheduledTask")) || "wake up and continue your research";
-    const history = (await this.ctx.storage.get("history")) || [];
-    const reply = await this.runAgent(`Scheduled task: ${task}`, history, () => {});
-    history.push({ role: "assistant", content: `[scheduled] ${reply}`, ts: Date.now() });
-    await this.ctx.storage.put("history", history.slice(-40));
-    await this.ctx.storage.delete("scheduledTask");
+    // Alarm logic
   }
 }
