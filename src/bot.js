@@ -37,6 +37,14 @@ export class BotDurableObject {
       return Response.json(reg);
     }
 
+    if (path === "/unregister") {
+      const { name } = await request.json();
+      let reg = (await this.ctx.storage.get("registry")) || [];
+      reg = reg.filter(b => b.name !== name);
+      await this.ctx.storage.put("registry", reg);
+      return Response.json({ ok: true });
+    }
+
     if (path === "/register") {
       const { name, instructions } = await request.json();
       const reg = (await this.ctx.storage.get("registry")) || [];
@@ -81,6 +89,11 @@ export class BotDurableObject {
       await this.ctx.storage.put("name", this.name);
       await this.ctx.storage.put("instructions", this.instructions);
       return new Response("ok");
+    }
+
+    if (path === "/delete") {
+      await this.ctx.storage.deleteAll();
+      return new Response("deleted");
     }
 
     if (!this.name) {
