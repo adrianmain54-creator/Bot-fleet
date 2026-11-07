@@ -1,4 +1,4 @@
-name = "grok-bot-fleet"
+name = "bot-fleet"
 main = "src/index.js"
 compatibility_date = "2026-01-01"
 
