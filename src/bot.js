@@ -141,7 +141,6 @@ export class BotDurableObject {
   }
 
   async runAgent(userMessage, history, send) {
-    // Force the UI to open the thinking dropdown immediately
     send({ type: "status", text: "Analyzing request..." });
 
     const memory = (await this.ctx.storage.get("memory")) || [];
@@ -355,18 +354,20 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
   async askBrain(messages) {
     try {
-      // UPGRADED TO 70B MODEL (Much smarter, better at using tools)
       const res = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", {
         messages,
         max_tokens: 1000,
       });
       
+      // FIX: The 70B model returns the OpenAI format, not the standard Workers AI format
+      if (res && res.choices && res.choices[0] && res.choices[0].message) {
+        return res.choices[0].message.content;
+      }
       if (typeof res === 'string') return res;
       if (res && typeof res.response === 'string') return res.response;
       
       return JSON.stringify(res);
     } catch (e) {
-      // Fallback to 8B if 70B fails
       try {
         const fallback = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
           messages,
