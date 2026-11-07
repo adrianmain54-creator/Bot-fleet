@@ -20,9 +20,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief of Staff. Your job is to manage tasks, assign jobs to specialists using the message_bot tool, and summarize results for Aoid. You do not do heavy research yourself. If Aoid asks for something, figure out if you need the researcher or writer, message them, wait for their reply, and then give Aoid the final answer." },
-          { name: "researcher", instructions: "You are the Researcher. You only use the search and fetch tools to find facts. When the Chief messages you, do the research and reply with your findings." },
-          { name: "writer", instructions: "You are the Writer. You take raw research and turn it into clean, well-formatted reports. When the Chief messages you with research, write the report and reply." }
+          { name: "chief", instructions: "You are the Chief. You handle everything yourself. Use the 'search' tool to find info, use 'add_job' to put things on the board, and use 'schedule' to set future tasks. Write reports directly." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -156,7 +154,7 @@ You have these tools (call one by replying with ONLY a JSON object and nothing e
 - {"tool":"add_job","title":"...","description":"...","assigned_to":"..."} — add a task to the board
 - {"tool":"list_jobs"} — see all tasks on the board
 - {"tool":"update_job","id":"...","status":"done|in_progress"} — update a task
-- {"tool":"message_bot","target":"bot_name","message":"..."} — send a message to another bot and wait for their reply
+- {"tool":"message_bot","target":"bot_name","message":"..."} — send a message to another bot
 
 If no tool is needed, just answer normally in plain text (no JSON).
 Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
