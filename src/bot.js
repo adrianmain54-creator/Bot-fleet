@@ -1,0 +1,221 @@
+export class BotDurableObject {
+  constructor(ctx, env) {
+    this.ctx = ctx;
+    this.env = env;
+    this.name = null;
+    this.instructions = "";
+  }
+
+  async fetch(request) {
+    const url = new URL(request.url);
+    const path = url.pathname;
+
+    if (path === "/init") {
+      const { name, instructions } = await request.json();
+      this.name = name;
+      this.instructions = instructions || "You are a helpful autonomous research bot.";
+      await this.ctx.storage.put("name", this.name);
+      await this.ctx.storage.put("instructions", this.instructions);
+      return new Response("ok");
+    }
+
+    if (path === "/list") {
+      const reg = (await this.ctx.storage.get("registry")) || [];
+      return Response.json(reg);
+    }
+
+    if (path === "/register") {
+      const { name, instructions } = await request.json();
+      const reg = (await this.ctx.storage.get("registry")) || [];
+      if (!reg.find(b => b.name === name)) {
+        reg.push({ name, instructions });
+        await this.ctx.storage.put("registry", reg);
+      }
+      return Response.json({ ok: true });
+    }
+
+    if (!this.name) {
+      this.name = (await this.ctx.storage.get("name")) || "unnamed";
+      this.instructions = (await this.ctx.storage.get("instructions")) || "You are a helpful autonomous research bot.";
+    }
+
+    if (path === "/messages") {
+      const msgs = (await this.ctx.storage.get("history")) || [];
+      return Response.json(msgs);
+    }
+
+    if (path === "/message" && request.method === "POST") {
+      const { message } = await request.json();
+      return this.handleMessage(message);
+    }
+
+    return new Response("not found", { status: 404 });
+  }
+
+  async handleMessage(userMessage) {
+    const history = (await this.ctx.storage.get("history")) || [];
+    history.push({ role: "user", content: userMessage, ts: Date.now() });
+    await this.ctx.storage.put("history", history.slice(-40));
+
+    const stream = new ReadableStream({
+      start: async (controller) => {
+        const enc = new TextEncoder();
+        const send = (o) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
+        try {
+          let reply = await this.runAgent(userMessage, history);
+          for (let i = 0; i < reply.length; i += 60) {
+            send({ type: "delta", text: reply.slice(i, i + 60) });
+          }
+          history.push({ role: "assistant", content: reply, ts: Date.now() });
+          await this.ctx.storage.put("history", history.slice(-40));
+          send({ type: "done" });
+        } catch (e) {
+          send({ type: "error", text: String(e.message || e) });
+        }
+        controller.close();
+      },
+    });
+
+    return new Response(stream, {
+      headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" },
+    });
+  }
+
+  async runAgent(userMessage, history) {
+    const memory = (await this.ctx.storage.get("memory")) || [];
+    const system = `You are "${this.name}", an autonomous AI worker with your own cloud computer.
+Instructions: ${this.instructions}
+You have these tools (call one by replying with ONLY a JSON object and nothing else):
+- {"tool":"search","query":"..."} — search the web
+- {"tool":"fetch","url":"..."} — read a webpage
+- {"tool":"remember","note":"..."} — save a fact to long-term memory
+- {"tool":"recall"} — list memory
+- {"tool":"schedule","when":"ISO date","task":"..."} — schedule a future task
+If no tool is needed, just answer normally in plain text (no JSON).
+Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
+
+    const messages = [
+      { role: "system", content: system },
+      ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
+      { role: "user", content: userMessage },
+    ];
+
+    let raw = await this.askBrain(messages);
+
+    for (let i = 0; i < 3; i++) {
+      const toolCall = this.parseTool(raw);
+      if (!toolCall) break;
+      const result = await this.runTool(toolCall);
+      messages.push({ role: "assistant", content: raw });
+      messages.push({ role: "user", content: `Tool result: ${result}` });
+      raw = await this.askBrain(messages);
+    }
+
+    return raw;
+  }
+
+  parseTool(text) {
+    try {
+      const obj = JSON.parse(text.trim());
+      if (obj && obj.tool) return obj;
+    } catch {}
+    return null;
+  }
+
+  async runTool({ tool, ...args }) {
+    if (tool === "search") {
+      try {
+        const q = encodeURIComponent(args.query || "");
+        const res = await fetch(`https://html.duckduckgo.com/html/?q=${q}`, {
+          headers: { "user-agent": "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)" },
+        });
+        const html = await res.text();
+        const results = [];
+        const re = /<a rel="nofollow" class="result__a" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
+        let m;
+        while ((m = re.exec(html)) && results.length < 5) {
+          results.push(`- ${m[2].replace(/<[^>]+>/g, "").trim()} (${m[1]})`);
+        }
+        return results.length ? results.join("\n") : "no results";
+      } catch (e) {
+        return "search failed: " + e.message;
+      }
+    }
+
+    if (tool === "fetch") {
+      try {
+        const res = await fetch(args.url, {
+          headers: { "user-agent": "Mozilla/5.0 (iPad; CPU OS 17_0 like Mac OS X)" },
+        });
+        const html = await res.text();
+        const text = html
+          .replace(/<script[\s\S]*?<\/script>/gi, " ")
+          .replace(/<style[\s\S]*?<\/style>/gi, " ")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim()
+          .slice(0, 4000);
+        return text || "empty page";
+      } catch (e) {
+        return "fetch failed: " + e.message;
+      }
+    }
+
+    if (tool === "remember") {
+      const mem = (await this.ctx.storage.get("memory")) || [];
+      mem.push(String(args.note).slice(0, 300));
+      await this.ctx.storage.put("memory", mem.slice(-50));
+      return "saved";
+    }
+
+    if (tool === "recall") {
+      const mem = (await this.ctx.storage.get("memory")) || [];
+      return mem.length ? mem.join("\n") : "empty";
+    }
+
+    if (tool === "schedule") {
+      const when = new Date(args.when).getTime();
+      if (!when) return "invalid date";
+      await this.ctx.storage.setAlarm(when);
+      await this.ctx.storage.put("scheduledTask", args.task || "wake up and check in");
+      return `scheduled for ${new Date(when).toISOString()}`;
+    }
+
+    return "unknown tool";
+  }
+
+  async askBrain(messages) {
+    if (this.env.BRAIN === "groq" && this.env.GROQ_API_KEY) {
+      const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          authorization: "Bearer " + this.env.GROQ_API_KEY,
+        },
+        body: JSON.stringify({
+          model: "llama-3.3-70b-versatile",
+          messages,
+          temperature: 0.7,
+          max_tokens: 800,
+        }),
+      });
+      if (!res.ok) throw new Error("groq: " + (await res.text()).slice(0, 200));
+      const data = await res.json();
+      return data.choices[0].message.content;
+    }
+    const res = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+      messages,
+      max_tokens: 800,
+    });
+    return res.response;
+  }
+
+  async alarm() {
+    const task = (await this.ctx.storage.get("scheduledTask")) || "wake up and continue your research";
+    const history = (await this.ctx.storage.get("history")) || [];
+    const reply = await this.runAgent(`Scheduled task: ${task}`, history);
+    history.push({ role: "assistant", content: `[scheduled] ${reply}`, ts: Date.now() });
+    await this.ctx.storage.put("history", history.slice(-40));
+    await this.ctx.storage.delete("scheduledTask");
+  }
+}
