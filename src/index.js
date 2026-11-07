@@ -32,16 +32,13 @@ export default {
       return reg.fetch(new Request("https://registry/list_jobs"));
     }
 
-    // Handle bot deletion
     if (url.pathname.startsWith("/api/bot/") && url.pathname.endsWith("/delete") && request.method === "POST") {
       const name = decodeURIComponent(url.pathname.split('/')[3]);
-      // Remove from registry
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       await reg.fetch(new Request("https://registry/unregister", {
         method: "POST",
         body: JSON.stringify({ name })
       }));
-      // Wipe the bot
       const stub = env.BOT.get(env.BOT.idFromName(name));
       await stub.fetch(new Request("https://bot/delete", { method: "POST" }));
       return Response.json({ ok: true });
@@ -110,6 +107,11 @@ header button{margin-left:auto;background:none;border:1px solid var(--line);colo
 .tabs{display:flex;gap:8px;margin-bottom:14px}
 .tabs button{flex:1;background:#0d0d0d;border:1px solid var(--line);color:var(--fg);padding:8px;border-radius:8px;font-weight:600;font-size:13px}
 .tabs button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+
+/* NEW THINKING STYLES */
+.thoughts { font-size: 12px; color: var(--dim); background: #0a0a0a; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: -4px; max-width: 92%; align-self: flex-start; width: 100%; white-space: normal; }
+.thoughts summary { cursor: pointer; color: var(--accent); font-weight: 600; outline: none; }
+.thoughts .thought-content { margin-top: 8px; font-family: ui-monospace, "SF Mono", monospace; border-top: 1px solid var(--line); padding-top: 8px; word-break: break-all; font-size: 11px; line-height: 1.5; color: #888; }
 </style>
 </head>
 <body>
@@ -221,6 +223,19 @@ async function send() {
   u.className = 'msg user'; u.textContent = text;
   log.appendChild(u); log.scrollTop = log.scrollHeight;
 
+  // Create the Thought dropdown
+  const thoughtsEl = document.createElement('details');
+  thoughtsEl.className = 'thoughts';
+  thoughtsEl.style.display = 'none';
+  const summaryEl = document.createElement('summary');
+  summaryEl.textContent = 'Thinking...';
+  const contentEl = document.createElement('div');
+  contentEl.className = 'thought-content';
+  thoughtsEl.appendChild(summaryEl);
+  thoughtsEl.appendChild(contentEl);
+  
+  log.appendChild(thoughtsEl); 
+
   const botEl = document.createElement('div');
   botEl.className = 'msg bot cursor';
   log.appendChild(botEl); log.scrollTop = log.scrollHeight;
@@ -244,8 +259,23 @@ async function send() {
         if (!line.trim()) continue;
         try {
           const o = JSON.parse(line);
-          if (o.type === 'delta') { acc += o.text; botEl.innerHTML = md(acc); }
-          if (o.type === 'error') { acc += '\\n\\n' + o.text; botEl.innerHTML = md(acc); }
+          
+          if (o.type === 'status') {
+            thoughtsEl.style.display = 'block';
+            const p = document.createElement('div');
+            p.textContent = o.text;
+            contentEl.appendChild(p);
+            summaryEl.textContent = 'Processed steps (click to expand)';
+          }
+          
+          if (o.type === 'delta') { 
+            acc += o.text; 
+            botEl.innerHTML = md(acc); 
+          }
+          if (o.type === 'error') { 
+            acc += '\\n\\n' + o.text; 
+            botEl.innerHTML = md(acc); 
+          }
         } catch {}
       }
       log.scrollTop = log.scrollHeight;
