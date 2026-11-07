@@ -313,7 +313,7 @@ async function send() {
 
   const thoughtsEl = document.createElement('details');
   thoughtsEl.className = 'thoughts';
-  thoughtsEl.style.display = 'none';
+  thoughtsEl.style.display = 'block'; // Now opens instantly
   const summaryEl = document.createElement('summary');
   summaryEl.textContent = 'Thinking...';
   const contentEl = document.createElement('div');
@@ -350,7 +350,6 @@ async function send() {
           const o = JSON.parse(line);
           
           if (o.type === 'status') {
-            thoughtsEl.style.display = 'block';
             const p = document.createElement('div');
             p.textContent = o.text;
             contentEl.appendChild(p);
