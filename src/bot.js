@@ -20,7 +20,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief. You handle everything yourself. Use the 'search' tool to find info, and use the 'execute_code' tool to test code. If you are asked to write code, you MUST test it using 'execute_code'. If the test fails, fix the code and test again. Keep looping until the code runs perfectly before giving your final answer." }
+          { name: "chief", instructions: "You are the Chief. You are an autonomous developer and researcher. If asked to build a project, write the code, use execute_code to test it, and once it works, use github_create_repo and github_push_file to save it. Always test your code first." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -150,6 +150,8 @@ You have these tools (call one by replying with ONLY a JSON object and nothing e
 - {"tool":"search","query":"..."} — search the web
 - {"tool":"fetch","url":"..."} — read a webpage
 - {"tool":"execute_code","language":"python|javascript","code":"..."} — run code and see the output
+- {"tool":"github_create_repo","name":"repo-name","description":"..."} — creates a new public repo on the user's GitHub
+- {"tool":"github_push_file","repo":"repo-name","path":"filename.py","content":"...","message":"commit message"} — pushes a file to the repo
 - {"tool":"remember","note":"..."} — save a fact to memory
 - {"tool":"recall"} — list memory
 - {"tool":"schedule","when":"ISO date","task":"..."} — schedule a future task
@@ -170,11 +172,10 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
     let raw = await this.askBrain(messages);
     let steps = 0;
 
-    // Continuous loop up to 12 steps
-    while (steps < 12) {
+    while (steps < 15) {
       steps++;
       const toolCall = this.parseTool(raw);
-      if (!toolCall) break; // It's done thinking
+      if (!toolCall) break;
       
       send({ type: "status", text: `Step ${steps}: Using ${toolCall.tool}...` });
       
@@ -239,7 +240,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
 
     if (tool === "execute_code") {
       try {
-        // Using the free Piston API to execute code
         const res = await fetch("https://emkc.org/api/v2/piston/execute", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -258,6 +258,77 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
         return "Execution failed: " + e.message;
       }
     }
+
+    // --- GITHUB TOOLS ---
+    if (tool === "github_create_repo") {
+      if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set in Cloudflare environment variables.";
+      try {
+        const res = await fetch("https://api.github.com/user/repos", {
+          method: "POST",
+          headers: {
+            "authorization": "Bearer " + this.env.GITHUB_TOKEN,
+            "user-agent": "BotFleet",
+            "content-type": "application/json",
+            "accept": "application/vnd.github.v3+json"
+          },
+          body: JSON.stringify({
+            name: args.name,
+            description: args.description || "",
+            private: false,
+            auto_init: true
+          })
+        });
+        if (!res.ok) return "GitHub error: " + (await res.text());
+        const data = await res.json();
+        return `Repo created successfully: ${data.html_url}`;
+      } catch (e) {
+        return "Failed: " + e.message;
+      }
+    }
+
+    if (tool === "github_push_file") {
+      if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set.";
+      try {
+        // Get user to construct API URL
+        const userRes = await fetch("https://api.github.com/user", {
+          headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
+        });
+        const user = await userRes.json();
+        
+        // Get current file SHA if it exists
+        let sha = null;
+        const checkRes = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
+          headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
+        });
+        if (checkRes.ok) {
+          const fileData = await checkRes.json();
+          sha = fileData.sha;
+        }
+
+        const body = {
+          message: args.message || "Update from Bot Fleet",
+          content: btoa(unescape(encodeURIComponent(args.content))),
+        };
+        if (sha) body.sha = sha;
+
+        const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
+          method: "PUT",
+          headers: {
+            "authorization": "Bearer " + this.env.GITHUB_TOKEN,
+            "user-agent": "BotFleet",
+            "content-type": "application/json",
+            "accept": "application/vnd.github.v3+json"
+          },
+          body: JSON.stringify(body)
+        });
+        
+        if (!res.ok) return "GitHub error: " + (await res.text());
+        return `File ${args.path} pushed successfully.`;
+      } catch (e) {
+        return "Failed: " + e.message;
+      }
+    }
+    // -------------------
 
     if (tool === "remember") {
       const mem = (await this.ctx.storage.get("memory")) || [];
