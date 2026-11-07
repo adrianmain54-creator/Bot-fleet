@@ -20,7 +20,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief. You handle everything yourself. Use the 'search' tool to find info, use 'add_job' to put things on the board, and use 'schedule' to set future tasks. Write reports directly." }
+          { name: "chief", instructions: "You are the Chief. You handle everything yourself. Use the 'search' tool to find info, and use the 'execute_code' tool to test code. If you are asked to write code, you MUST test it using 'execute_code'. If the test fails, fix the code and test again. Keep looping until the code runs perfectly before giving your final answer." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -122,7 +122,6 @@ export class BotDurableObject {
         const enc = new TextEncoder();
         const send = (o) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
         try {
-          // Pass the send function into runAgent so it can stream status updates
           let reply = await this.runAgent(userMessage, history, send);
           
           for (let i = 0; i < reply.length; i += 60) {
@@ -150,6 +149,7 @@ Instructions: ${this.instructions}
 You have these tools (call one by replying with ONLY a JSON object and nothing else):
 - {"tool":"search","query":"..."} — search the web
 - {"tool":"fetch","url":"..."} — read a webpage
+- {"tool":"execute_code","language":"python|javascript","code":"..."} — run code and see the output
 - {"tool":"remember","note":"..."} — save a fact to memory
 - {"tool":"recall"} — list memory
 - {"tool":"schedule","when":"ISO date","task":"..."} — schedule a future task
@@ -168,17 +168,19 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
     ];
 
     let raw = await this.askBrain(messages);
+    let steps = 0;
 
-    for (let i = 0; i < 4; i++) {
+    // Continuous loop up to 12 steps
+    while (steps < 12) {
+      steps++;
       const toolCall = this.parseTool(raw);
-      if (!toolCall) break;
+      if (!toolCall) break; // It's done thinking
       
-      // Stream the thought process to the UI
-      send({ type: "status", text: `Using tool: ${toolCall.tool} -> ${JSON.stringify(toolCall).slice(0, 80)}...` });
+      send({ type: "status", text: `Step ${steps}: Using ${toolCall.tool}...` });
       
       const result = await this.runTool(toolCall);
       
-      send({ type: "status", text: `Tool result: ${result.slice(0, 100)}...` });
+      send({ type: "status", text: `Result: ${result.slice(0, 150)}...` });
       
       messages.push({ role: "assistant", content: raw });
       messages.push({ role: "user", content: `Tool result: ${result}` });
@@ -232,6 +234,28 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
         return text || "empty page";
       } catch (e) {
         return "fetch failed: " + e.message;
+      }
+    }
+
+    if (tool === "execute_code") {
+      try {
+        // Using the free Piston API to execute code
+        const res = await fetch("https://emkc.org/api/v2/piston/execute", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            language: args.language || "python",
+            version: "*",
+            files: [{ content: args.code || "" }]
+          })
+        });
+        const data = await res.json();
+        if (data.run) {
+           return data.run.stdout || data.run.stderr || "Code executed with no output.";
+        }
+        return "Execution error: " + JSON.stringify(data);
+      } catch (e) {
+        return "Execution failed: " + e.message;
       }
     }
 
