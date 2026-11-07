@@ -203,7 +203,9 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       const data = await res.json();
       return data.choices[0].message.content;
     }
-    const res = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct", {
+    
+    // This is the line that got updated
+    const res = await this.env.AI.run("@cf/meta/llama-3.1-8b-instruct-fast", {
       messages,
       max_tokens: 800,
     });
