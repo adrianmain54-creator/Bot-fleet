@@ -64,80 +64,167 @@ const HTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Bot Fleet">
-<title>Bot Fleet</title>
+<meta name="apple-mobile-web-app-title" content="Grok Bot">
+<meta name="theme-color" content="#000000">
+<title>Grok Bot</title>
 <style>
-:root{color-scheme:dark;--bg:#000;--fg:#e8e8e8;--dim:#6b6b6b;--line:#1a1a1a;--accent:#7c5cff;--bubble:#141414}
-*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:16px/1.45 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
-body{display:flex;flex-direction:column;height:100dvh;overflow:hidden}
-header{display:flex;align-items:center;gap:10px;padding:calc(env(safe-area-inset-top) + 10px) 16px 10px;border-bottom:1px solid var(--line);flex-shrink:0}
-.logo{font:700 18px ui-monospace,"SF Mono",monospace;letter-spacing:-.5px}
-.pill{font-size:11px;letter-spacing:.5px;text-transform:uppercase;color:var(--accent);border:1px solid #2a2247;border-radius:20px;padding:3px 9px}
-header button{margin-left:auto;background:none;border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:6px 10px;font-size:13px}
-#main{flex:1;overflow-y:auto;padding:14px 16px}
-.bot-card{background:var(--bubble);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
-.bot-card strong{font-size:15px}
-.bot-card .sub{color:var(--dim);font-size:13px;margin-top:2px}
-.bot-actions{display:flex;gap:8px;align-items:center}
-.bot-actions button.open-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600}
-.bot-actions button.del-btn{background:none;border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600}
-.job-card{background:#0a0a0a;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;font-size:14px}
-.job-card strong{color:var(--accent);display:block;margin-bottom:4px}
-.job-card .meta{color:var(--dim);font-size:12px;margin-top:6px}
-#chat{display:none;flex-direction:column;height:100%}
-#log{flex:1;overflow-y:auto;padding:14px 16px 8px;display:flex;flex-direction:column;gap:10px}
-.msg{max-width:92%;word-wrap:break-word;padding:10px 14px;border-radius:16px;white-space:pre-wrap}
-.msg.user{align-self:flex-end;background:var(--bubble);border:1px solid var(--line)}
-.msg.bot{align-self:flex-start;background:#0d0d0d;border:1px solid #1f1f1f}
-.msg code{background:#111;padding:1px 5px;border-radius:4px;font-family:ui-monospace,"SF Mono",monospace;font-size:.92em}
-.msg pre{background:#0b0b0b;border:1px solid var(--line);border-radius:10px;padding:10px 12px;overflow-x:auto;margin:8px 0}
-.msg pre code{background:none;padding:0}
-.msg strong{color:#fff}
-#bar{display:flex;gap:8px;padding:10px 12px calc(env(safe-area-inset-bottom) + 10px);border-top:1px solid var(--line);background:#000;flex-shrink:0}
-#in{flex:1;background:#0d0d0d;color:var(--fg);border:1px solid var(--line);border-radius:20px;padding:11px 16px;font:inherit;resize:none;max-height:120px;min-height:44px;outline:none}
-#send{background:var(--accent);color:#fff;border:none;border-radius:22px;padding:0 18px;font-weight:600;font-size:15px}
-#send:disabled{opacity:.4}
-.cursor:after{content:"▋";color:var(--dim);animation:b 1s steps(2) infinite}
-@keyframes b{50%{opacity:0}}
-.back{background:none;border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:6px 10px;font-size:13px}
-.tabs{display:flex;gap:8px;margin-bottom:14px}
-.tabs button{flex:1;background:#0d0d0d;border:1px solid var(--line);color:var(--fg);padding:8px;border-radius:8px;font-weight:600;font-size:13px}
-.tabs button.active{background:var(--accent);border-color:var(--accent);color:#fff}
+  :root {
+    color-scheme: dark;
+    --bg: #000000;
+    --surface: #0a0a0a;
+    --surface-hover: #141414;
+    --border: #222222;
+    --text: #f5f5f5;
+    --text-dim: #888888;
+    --accent: #ffffff;
+    --accent-bg: #1a1a1a;
+    --user-bubble: #1c1c1e;
+    --font-sys: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
+  }
 
-/* NEW THINKING STYLES */
-.thoughts { font-size: 12px; color: var(--dim); background: #0a0a0a; border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; margin-bottom: -4px; max-width: 92%; align-self: flex-start; width: 100%; white-space: normal; }
-.thoughts summary { cursor: pointer; color: var(--accent); font-weight: 600; outline: none; }
-.thoughts .thought-content { margin-top: 8px; font-family: ui-monospace, "SF Mono", monospace; border-top: 1px solid var(--line); padding-top: 8px; word-break: break-all; font-size: 11px; line-height: 1.5; color: #888; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font-sys); overflow: hidden; }
+  
+  body { display: flex; flex-direction: column; height: 100dvh; }
+
+  /* HEADERS */
+  header {
+    display: flex; align-items: center; gap: 12px;
+    padding: calc(env(safe-area-inset-top) + 12px) 20px 12px;
+    background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border);
+    position: sticky; top: 0; z-index: 10;
+  }
+  .logo { font: 700 20px var(--font-mono); letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
+  .logo span { font: 500 11px var(--font-sys); color: var(--text-dim); background: var(--surface); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px; }
+  
+  .btn-icon {
+    background: var(--surface); border: 1px solid var(--border); color: var(--text);
+    border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; transition: all 0.2s; margin-left: auto;
+  }
+  .btn-icon:active { background: var(--surface-hover); transform: scale(0.95); }
+
+  /* MAIN VIEWS */
+  #main { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
+  
+  .tabs { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; }
+  .tabs button {
+    flex: 1; background: transparent; border: none; color: var(--text-dim); padding: 10px;
+    border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s;
+  }
+  .tabs button.active { background: var(--accent-bg); color: var(--text); box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+
+  /* BOT LIST */
+  .bot-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 16px 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
+    transition: background 0.2s;
+  }
+  .bot-card:active { background: var(--surface-hover); }
+  .bot-card h3 { margin: 0 0 4px 0; font-size: 16px; font-weight: 600; }
+  .bot-card p { margin: 0; color: var(--text-dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+  
+  .bot-actions { display: flex; gap: 8px; align-items: center; }
+  .btn-open { background: var(--text); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; }
+  .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+
+  /* JOB BOARD */
+  .job-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
+  .job-card h3 { margin: 0 0 8px 0; font-size: 16px; color: var(--text); }
+  .job-card p { margin: 0 0 12px 0; font-size: 14px; color: var(--text-dim); }
+  .job-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 12px; }
+  .job-meta span { display: flex; align-items: center; gap: 4px; }
+
+  /* CHAT VIEW */
+  #chat { display: none; flex-direction: column; height: 100%; background: var(--bg); }
+  #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; }
+  #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
+  
+  .msg { max-width: 85%; font-size: 16px; line-height: 1.5; animation: slideUp 0.3s ease-out; }
+  .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; }
+  .msg.bot { align-self: flex-start; padding: 4px 0; white-space: pre-wrap; }
+  
+  .msg code { background: var(--surface); padding: 2px 6px; border-radius: 6px; font-family: var(--font-mono); font-size: 0.9em; }
+  .msg pre { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; overflow-x: auto; margin: 8px 0; }
+  .msg pre code { background: none; padding: 0; }
+  .msg strong { color: #fff; font-weight: 600; }
+
+  /* THOUGHTS DROPDOWN */
+  .thoughts {
+    align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; margin-bottom: 4px; font-size: 13px; animation: fadeIn 0.3s;
+  }
+  .thoughts summary {
+    padding: 10px 14px; cursor: pointer; color: var(--text-dim); font-weight: 500; list-style: none;
+    display: flex; align-items: center; gap: 8px; outline: none;
+  }
+  .thoughts summary::-webkit-details-marker { display: none; }
+  .thoughts summary:before { content: "▶"; font-size: 10px; transition: transform 0.2s; }
+  .thoughts[open] summary:before { transform: rotate(90deg); }
+  .thoughts .content { padding: 0 14px 14px; font-family: var(--font-mono); color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
+  .thoughts .content div { margin-bottom: 6px; }
+
+  /* INPUT BAR */
+  #chat-bar { 
+    padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); 
+    background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-end;
+  }
+  #chat-input {
+    flex: 1; background: var(--surface); color: var(--text); border: 1px solid var(--border);
+    border-radius: 24px; padding: 12px 18px; font: inherit; font-size: 16px; resize: none; max-height: 120px;
+    outline: none; transition: border-color 0.2s;
+  }
+  #chat-input:focus { border-color: #444; }
+  #chat-send {
+    background: var(--text); color: var(--bg); border: none; border-radius: 50%; width: 44px; height: 44px;
+    display: flex; align-items: center; justify-content: center; font-size: 20px; transition: transform 0.2s; flex-shrink: 0;
+  }
+  #chat-send:active { transform: scale(0.9); }
+  #chat-send:disabled { opacity: 0.3; }
+
+  .cursor:after { content: "▋"; color: var(--text-dim); animation: blink 1s steps(2) infinite; margin-left: 2px; }
+  
+  @keyframes blink { 50% { opacity: 0; } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>
 </head>
 <body>
-<header>
-  <div class="logo">bot fleet</div>
-  <div class="pill">free</div>
-  <button id="newBtn">+ new bot</button>
+
+<header id="main-header">
+  <div class="logo">Grok<span>Fleet</span></div>
+  <button class="btn-icon" id="btn-new-bot" title="New Bot">+</button>
 </header>
+
 <div id="main">
   <div class="tabs">
-    <button id="tabBots" class="active" onclick="switchTab('bots')">Bots</button>
-    <button id="tabJobs" onclick="switchTab('jobs')">Job Board</button>
+    <button id="tab-bots" class="active" onclick="switchTab('bots')">Agents</button>
+    <button id="tab-jobs" onclick="switchTab('jobs')">Jobs</button>
   </div>
   <div id="list"></div>
 </div>
+
 <div id="chat">
   <header>
-    <button class="back" id="backBtn">← back</button>
-    <div class="logo" id="chatName" style="margin-left:8px"></div>
+    <button class="btn-icon" id="btn-back" style="margin-left:0; border:none; background:none;">←</button>
+    <div class="logo" id="chat-title" style="font-size:18px;"></div>
+    <div style="margin-left:auto; width:36px;"></div> <!-- spacer -->
   </header>
-  <div id="log"></div>
-  <div id="bar">
-    <textarea id="in" rows="1" placeholder="assign a job…" enterkeyhint="send"></textarea>
-    <button id="send">send</button>
+  
+  <div id="chat-log"></div>
+  
+  <div id="chat-bar">
+    <textarea id="chat-input" rows="1" placeholder="Message..."></textarea>
+    <button id="chat-send">↑</button>
   </div>
 </div>
+
 <script>
 const $ = s => document.querySelector(s);
 let currentBot = null;
@@ -152,21 +239,24 @@ async function api(path, opts) {
 
 function switchTab(tab) {
   currentTab = tab;
-  $('#tabBots').className = tab === 'bots' ? 'active' : '';
-  $('#tabJobs').className = tab === 'jobs' ? 'active' : '';
+  $('#tab-bots').className = tab === 'bots' ? 'active' : '';
+  $('#tab-jobs').className = tab === 'jobs' ? 'active' : '';
   if (tab === 'bots') loadBots(); else loadJobs();
 }
 
 async function loadBots() {
   const bots = await api('/api/bots');
-  $('#list').innerHTML = bots.length ? bots.map(b => \`
+  $('#list').innerHTML = bots.length ? bots.map(b => `
     <div class="bot-card">
-      <div><strong>\${b.name}</strong><div class="sub">\${(b.instructions||'no instructions').slice(0,60)}</div></div>
-      <div class="bot-actions">
-        <button class="open-btn" onclick="openBot('\${b.name}')">open</button>
-        <button class="del-btn" onclick="deleteBot('\${b.name}')">✕</button>
+      <div>
+        <h3>${b.name}</h3>
+        <p>${(b.instructions||'No instructions').slice(0,60)}</p>
       </div>
-    </div>\`).join('') : '<p style="color:var(--dim);text-align:center;margin-top:40px">No bots yet. Tap "+ new bot".</p>';
+      <div class="bot-actions">
+        <button class="btn-open" onclick="openBot('${b.name}')">Chat</button>
+        <button class="btn-del" onclick="deleteBot('${b.name}')">✕</button>
+      </div>
+    </div>`).join('') : '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
     
   if (!hasAutoOpened && bots.find(b => b.name === 'chief')) {
     hasAutoOpened = true;
@@ -182,26 +272,31 @@ async function deleteBot(name) {
 
 async function loadJobs() {
   const jobs = await api('/api/jobs');
-  $('#list').innerHTML = jobs.length ? jobs.map(j => \`
+  $('#list').innerHTML = jobs.length ? jobs.map(j => `
     <div class="job-card">
-      <strong>\${j.title}</strong>
-      \${j.description || ''}
-      <div class="meta">Assigned: \${j.assigned_to} | Status: \${j.status} | By: \${j.creator}</div>
-    </div>\`).join('') : '<p style="color:var(--dim);text-align:center;margin-top:40px">Job board is empty.</p>';
+      <h3>${j.title}</h3>
+      <p>${j.description || 'No description'}</p>
+      <div class="job-meta">
+        <span>👤 ${j.assigned_to}</span>
+        <span>🚦 ${j.status}</span>
+        <span>🛠 ${j.creator}</span>
+      </div>
+    </div>`).join('') : '<p style="color:var(--text-dim);text-align:center;margin-top:40px">Job board is empty.</p>';
 }
 
 async function openBot(name) {
   currentBot = name;
   $('#main').style.display = 'none';
+  $('#main-header').style.display = 'none';
   $('#chat').style.display = 'flex';
-  $('#chatName').textContent = name;
+  $('#chat-title').textContent = name;
   await loadLog();
 }
 
 async function loadLog() {
-  const msgs = await api(\`/api/bot/\${encodeURIComponent(currentBot)}/messages\`);
-  const log = $('#log');
-  log.innerHTML = msgs.map(m => \`<div class="msg \${m.role}">\${m.role==='assistant'?md(m.content):esc(m.content)}</div>\`).join('');
+  const msgs = await api(`/api/bot/${encodeURIComponent(currentBot)}/messages`);
+  const log = $('#chat-log');
+  log.innerHTML = msgs.map(m => `<div class="msg ${m.role}">${m.role==='assistant'?md(m.content):esc(m.content)}</div>`).join('');
   log.scrollTop = log.scrollHeight;
 }
 
@@ -215,22 +310,22 @@ function md(raw){
 }
 
 async function send() {
-  const text = $('#in').value.trim();
+  const text = $('#chat-input').value.trim();
   if (!text || !currentBot) return;
-  $('#in').value = ''; $('#in').style.height = 'auto';
-  const log = $('#log');
+  $('#chat-input').value = ''; $('#chat-input').style.height = 'auto';
+  const log = $('#chat-log');
+  
   const u = document.createElement('div');
   u.className = 'msg user'; u.textContent = text;
   log.appendChild(u); log.scrollTop = log.scrollHeight;
 
-  // Create the Thought dropdown
   const thoughtsEl = document.createElement('details');
   thoughtsEl.className = 'thoughts';
   thoughtsEl.style.display = 'none';
   const summaryEl = document.createElement('summary');
   summaryEl.textContent = 'Thinking...';
   const contentEl = document.createElement('div');
-  contentEl.className = 'thought-content';
+  contentEl.className = 'content';
   thoughtsEl.appendChild(summaryEl);
   thoughtsEl.appendChild(contentEl);
   
@@ -241,7 +336,7 @@ async function send() {
   log.appendChild(botEl); log.scrollTop = log.scrollHeight;
 
   try {
-    const res = await fetch(\`/api/bot/\${encodeURIComponent(currentBot)}/message\`, {
+    const res = await fetch(`/api/bot/${encodeURIComponent(currentBot)}/message`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ message: text }),
@@ -250,11 +345,13 @@ async function send() {
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '', acc = '';
+    
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buf += dec.decode(value, { stream: true });
       const lines = buf.split('\\n'); buf = lines.pop();
+      
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
@@ -265,7 +362,7 @@ async function send() {
             const p = document.createElement('div');
             p.textContent = o.text;
             contentEl.appendChild(p);
-            summaryEl.textContent = 'Processed steps (click to expand)';
+            summaryEl.textContent = 'Processed steps';
           }
           
           if (o.type === 'delta') { 
@@ -283,28 +380,31 @@ async function send() {
     botEl.classList.remove('cursor');
   } catch (e) {
     botEl.classList.remove('cursor');
-    botEl.textContent = 'error: ' + e.message;
+    botEl.textContent = 'Error: ' + e.message;
   }
 }
 
-$('#send').onclick = send;
-$('#in').addEventListener('keydown', e => {
+$('#chat-send').onclick = send;
+$('#chat-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
-$('#in').addEventListener('input', () => {
-  $('#in').style.height = 'auto';
-  $('#in').style.height = Math.min($('#in').scrollHeight, 120) + 'px';
+$('#chat-input').addEventListener('input', () => {
+  $('#chat-input').style.height = 'auto';
+  $('#chat-input').style.height = Math.min($('#chat-input').scrollHeight, 120) + 'px';
 });
-$('#backBtn').onclick = () => {
+
+$('#btn-back').onclick = () => {
   currentBot = null;
   $('#chat').style.display = 'none';
-  $('#main').style.display = 'block';
+  $('#main').style.display = 'flex';
+  $('#main-header').style.display = 'flex';
   if(currentTab === 'bots') loadBots(); else loadJobs();
 };
-$('#newBtn').onclick = async () => {
-  const name = prompt('Bot name (no spaces):');
+
+$('#btn-new-bot').onclick = async () => {
+  const name = prompt('Agent Name (no spaces):');
   if (!name) return;
-  const instructions = prompt('What should this bot do?') || '';
+  const instructions = prompt('System Instructions:') || '';
   await api('/api/bots', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -312,6 +412,7 @@ $('#newBtn').onclick = async () => {
   });
   loadBots();
 };
+
 window.openBot = openBot;
 window.deleteBot = deleteBot;
 switchTab('bots');
