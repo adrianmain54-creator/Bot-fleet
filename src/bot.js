@@ -19,7 +19,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. You MUST use your tools to build things. Never write entire codebases in the chat. If asked to build an app, use github_create_repo and github_push_file." }
+          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. You MUST use your tools to build things. Never write entire codebases in the chat. If asked to build an app, use github_create_repo and github_push_file. If a tool fails because a token is missing, tell the user immediately to add the GITHUB_TOKEN in Cloudflare." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -150,7 +150,6 @@ You have these tools (you MUST reply with ONLY raw JSON to use a tool):
 - {"tool":"search","query":"..."}
 - {"tool":"fetch","url":"..."}
 - {"tool":"execute_code","language":"python|javascript","code":"..."}
-- {"tool":"browser_test","url":"...","script":"..."}
 - {"tool":"github_create_repo","name":"...","description":"..."}
 - {"tool":"github_push_file","repo":"...","path":"...","content":"...","message":"..."}
 - {"tool":"github_read_file","repo":"...","path":"..."}
@@ -158,6 +157,7 @@ You have these tools (you MUST reply with ONLY raw JSON to use a tool):
 - {"tool":"schedule","when":"...","task":"..."}
 
 CRITICAL RULE: DO NOT write massive blocks of code in the chat. You are a bot with tools. Use github_create_repo and github_push_file to actually build things.
+If a tool fails because of a missing token, stop looping and tell the user to add the GITHUB_TOKEN.
 Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
     const messages = [
@@ -168,7 +168,7 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
     let raw = await this.askBrain(messages);
     let steps = 0;
-    const maxSteps = 15;
+    const maxSteps = 10;
 
     while (steps < maxSteps) {
       const toolCall = this.parseTool(raw);
@@ -181,13 +181,14 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
       
       send({ type: "status", text: `Result: ${result.slice(0, 150)}...` });
       
+      // If we hit a fatal auth error, break the loop immediately
+      if (result.includes("GITHUB_TOKEN is not set")) {
+        return "I need permission to access your GitHub. Please add `GITHUB_TOKEN` to your Cloudflare Variables and try again.";
+      }
+
       messages.push({ role: "assistant", content: raw });
       messages.push({ role: "user", content: `Tool result: ${result}` });
 
-      if (steps === maxSteps - 1) {
-        messages.push({ role: "user", content: "You are almost out of steps. Output your final answer now." });
-      }
-      
       raw = await this.askBrain(messages);
       if (!raw || typeof raw !== 'string') {
          raw = "I experienced an internal error generating a response.";
@@ -196,7 +197,7 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
     }
 
     if (raw.trim().startsWith('{"tool"')) {
-       return "I ran into a formatting error and couldn't finish the task.";
+       return "I got stuck trying to use a tool. Please check the variables in Cloudflare.";
     }
 
     return raw;
@@ -242,20 +243,17 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
     if (tool === "execute_code") {
       try {
-        const res = await fetch("https://emkc.org/api/v2/piston/execute", {
+        // Swapped to a new free API since Piston is whitelisted
+        const res = await fetch("https://wandbox.org/api/compile.json", {
           method: "POST",
           headers: { "content-type": "application/json" },
           body: JSON.stringify({
-            language: args.language || "python",
-            version: "*",
-            files: [{ content: args.code || "" }]
+            compiler: args.language === "javascript" ? "nodejs-20.0.0" : "cpython-3.10.2",
+            code: args.code || ""
           })
         });
         const data = await res.json();
-        if (data.run) {
-           return data.run.stdout || data.run.stderr || "Code executed with no output.";
-        }
-        return "Execution error: " + JSON.stringify(data);
+        return data.program_output || data.compiler_error || data.program_error || "Code executed with no output.";
       } catch (e) {
         return "Execution failed: " + e.message;
       }
@@ -359,7 +357,6 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
         max_tokens: 1000,
       });
       
-      // FIX: The 70B model returns the OpenAI format, not the standard Workers AI format
       if (res && res.choices && res.choices[0] && res.choices[0].message) {
         return res.choices[0].message.content;
       }
@@ -380,7 +377,5 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
     }
   }
 
-  async alarm() {
-    // Alarm logic
-  }
+  async alarm() {}
 }
