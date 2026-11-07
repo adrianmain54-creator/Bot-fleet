@@ -201,53 +201,74 @@ const $ = s => document.querySelector(s);
 let currentBot = null;
 let currentTab = 'bots';
 let hasAutoOpened = false;
+
 async function api(path, opts) {
   const r = await fetch(path, opts);
   if (!r.ok) throw new Error(await r.text());
   return r.headers.get('content-type')?.includes('json') ? r.json() : r.text();
 }
+
 function switchTab(tab) {
   currentTab = tab;
   $('#tab-bots').className = tab === 'bots' ? 'active' : '';
   $('#tab-jobs').className = tab === 'jobs' ? 'active' : '';
   if (tab === 'bots') loadBots(); else loadJobs();
 }
+
 async function loadBots() {
   const bots = await api('/api/bots');
-  $('#list').innerHTML = bots.length ? bots.map(b => `
-    <div class="bot-card">
-      <div>
-        <h3>${b.name}</h3>
-        <p>${(b.instructions||'No instructions').slice(0,60)}</p>
-      </div>
-      <div class="bot-actions">
-        <button class="btn-open" onclick="openBot('${b.name}')">Chat</button>
-        <button class="btn-del" onclick="deleteBot('${b.name}')">✕</button>
-      </div>
-    </div>`).join('') : '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
+  let html = '';
+  if (bots.length) {
+    html = bots.map(function(b) {
+      return '<div class="bot-card">' +
+        '<div>' +
+          '<h3>' + b.name + '</h3>' +
+          '<p>' + (b.instructions || 'No instructions').slice(0,60) + '</p>' +
+        '</div>' +
+        '<div class="bot-actions">' +
+          '<button class="btn-open" onclick="openBot(\\'' + b.name + '\\')">Chat</button>' +
+          '<button class="btn-del" onclick="deleteBot(\\'' + b.name + '\\')">✕</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } else {
+    html = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
+  }
+  $('#list').innerHTML = html;
+  
   if (!hasAutoOpened && bots.find(b => b.name === 'chief')) {
     hasAutoOpened = true;
     openBot('chief');
   }
 }
+
 async function deleteBot(name) {
   if (!confirm("Delete " + name + " forever?")) return;
   await api('/api/bot/' + name + '/delete', { method: 'POST' });
   loadBots();
 }
+
 async function loadJobs() {
   const jobs = await api('/api/jobs');
-  $('#list').innerHTML = jobs.length ? jobs.map(j => `
-    <div class="job-card">
-      <h3>${j.title}</h3>
-      <p>${j.description || 'No description'}</p>
-      <div class="job-meta">
-        <span>👤 ${j.assigned_to}</span>
-        <span>🚦 ${j.status}</span>
-        <span>🛠 ${j.creator}</span>
-      </div>
-    </div>`).join('') : '<p style="color:var(--text-dim);text-align:center;margin-top:40px">Job board is empty.</p>';
+  let html = '';
+  if (jobs.length) {
+    html = jobs.map(function(j) {
+      return '<div class="job-card">' +
+        '<h3>' + j.title + '</h3>' +
+        '<p>' + (j.description || 'No description') + '</p>' +
+        '<div class="job-meta">' +
+          '<span>👤 ' + j.assigned_to + '</span>' +
+          '<span>🚦 ' + j.status + '</span>' +
+          '<span>🛠 ' + j.creator + '</span>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+  } else {
+    html = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">Job board is empty.</p>';
+  }
+  $('#list').innerHTML = html;
 }
+
 async function openBot(name) {
   currentBot = name;
   $('#main').style.display = 'none';
@@ -256,28 +277,40 @@ async function openBot(name) {
   $('#chat-title').textContent = name;
   await loadLog();
 }
+
 async function loadLog() {
-  const msgs = await api(`/api/bot/${encodeURIComponent(currentBot)}/messages`);
+  const msgs = await api('/api/bot/' + encodeURIComponent(currentBot) + '/messages');
   const log = $('#chat-log');
-  log.innerHTML = msgs.map(m => `<div class="msg ${m.role}">${m.role==='assistant'?md(m.content):esc(m.content)}</div>`).join('');
+  log.innerHTML = msgs.map(function(m) {
+    return '<div class="msg ' + m.role + '">' + (m.role === 'assistant' ? md(m.content) : esc(m.content)) + '</div>';
+  }).join('');
   log.scrollTop = log.scrollHeight;
 }
-function esc(s){return s.replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function md(raw){
-  let s=esc(raw);
-  s=s.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g,(_,c)=>'<pre><code>'+c.replace(/^\\n/,'')+'</code></pre>');
-  s=s.replace(/\`([^\`\\n]+)\`/g,'<code>$1</code>');
-  s=s.replace(/\\*\\*([^*\\n]+)\\*\\*/g,'<strong>$1</strong>');
+
+function esc(s) {
+  return s.replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
+function md(raw) {
+  let s = esc(raw);
+  s = s.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, function(_, c) { return '<pre><code>' + c.replace(/^\\n/, '') + '</code></pre>'; });
+  s = s.replace(/\`([^\`\\n]+)\`/g, '<code>$1</code>');
+  s = s.replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>');
   return s;
 }
+
 async function send() {
   const text = $('#chat-input').value.trim();
   if (!text || !currentBot) return;
   $('#chat-input').value = ''; $('#chat-input').style.height = 'auto';
   const log = $('#chat-log');
+  
   const u = document.createElement('div');
   u.className = 'msg user'; u.textContent = text;
   log.appendChild(u); log.scrollTop = log.scrollHeight;
+
   const thoughtsEl = document.createElement('details');
   thoughtsEl.className = 'thoughts';
   thoughtsEl.style.display = 'none';
@@ -287,12 +320,15 @@ async function send() {
   contentEl.className = 'content';
   thoughtsEl.appendChild(summaryEl);
   thoughtsEl.appendChild(contentEl);
+  
   log.appendChild(thoughtsEl); 
+
   const botEl = document.createElement('div');
   botEl.className = 'msg bot cursor';
   log.appendChild(botEl); log.scrollTop = log.scrollHeight;
+
   try {
-    const res = await fetch(`/api/bot/${encodeURIComponent(currentBot)}/message`, {
+    const res = await fetch('/api/bot/' + encodeURIComponent(currentBot) + '/message', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ message: text }),
@@ -301,15 +337,18 @@ async function send() {
     const reader = res.body.getReader();
     const dec = new TextDecoder();
     let buf = '', acc = '';
+    
     while (true) {
       const { value, done } = await reader.read();
       if (done) break;
       buf += dec.decode(value, { stream: true });
       const lines = buf.split('\\n'); buf = lines.pop();
+      
       for (const line of lines) {
         if (!line.trim()) continue;
         try {
           const o = JSON.parse(line);
+          
           if (o.type === 'status') {
             thoughtsEl.style.display = 'block';
             const p = document.createElement('div');
@@ -317,6 +356,7 @@ async function send() {
             contentEl.appendChild(p);
             summaryEl.textContent = 'Processed steps';
           }
+          
           if (o.type === 'delta') { 
             acc += o.text; 
             botEl.innerHTML = md(acc); 
@@ -335,6 +375,7 @@ async function send() {
     botEl.textContent = 'Error: ' + e.message;
   }
 }
+
 $('#chat-send').onclick = send;
 $('#chat-input').addEventListener('keydown', e => {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
@@ -343,6 +384,7 @@ $('#chat-input').addEventListener('input', () => {
   $('#chat-input').style.height = 'auto';
   $('#chat-input').style.height = Math.min($('#chat-input').scrollHeight, 120) + 'px';
 });
+
 $('#btn-back').onclick = () => {
   currentBot = null;
   $('#chat').style.display = 'none';
@@ -350,6 +392,7 @@ $('#btn-back').onclick = () => {
   $('#main-header').style.display = 'flex';
   if(currentTab === 'bots') loadBots(); else loadJobs();
 };
+
 $('#btn-new-bot').onclick = async () => {
   const name = prompt('Agent Name (no spaces):');
   if (!name) return;
@@ -361,6 +404,7 @@ $('#btn-new-bot').onclick = async () => {
   });
   loadBots();
 };
+
 window.openBot = openBot;
 window.deleteBot = deleteBot;
 switchTab('bots');
