@@ -10,7 +10,6 @@ export class BotDurableObject {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // --- REGISTRY LOGIC ---
     if (path === "/list") {
       const reg = (await this.ctx.storage.get("registry")) || [];
       return Response.json(reg);
@@ -78,7 +77,6 @@ export class BotDurableObject {
       }
       return Response.json({ ok: true });
     }
-    // ----------------------------------------
 
     if (path === "/init") {
       const { name, instructions } = await request.json();
@@ -177,8 +175,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
 
     while (steps < maxSteps) {
       const toolCall = this.parseTool(raw);
-      
-      // If it didn't call a tool, it's giving the final answer
       if (!toolCall) break; 
       
       steps++;
@@ -198,7 +194,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       raw = await this.askBrain(messages);
     }
 
-    // Clean up markdown if it tried to output JSON as the final answer
     if (raw.trim().startsWith('{"tool"')) {
        return "I ran into a formatting error and couldn't finish the task.";
     }
@@ -209,25 +204,17 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
   parseTool(text) {
     try {
       let clean = text.trim();
-      
-      // 1. Strip markdown code blocks if the AI wrapped it in ```json
       if (clean.startsWith('```')) {
         clean = clean.replace(/^```[a-zA-Z]*\n/, '').replace(/```$/, '').trim();
       }
-
-      // 2. Extract just the JSON object if there's conversational text around it
       const firstBrace = clean.indexOf('{');
       const lastBrace = clean.lastIndexOf('}');
-      
       if (firstBrace !== -1 && lastBrace !== -1) {
         clean = clean.substring(firstBrace, lastBrace + 1);
       }
-
       const obj = JSON.parse(clean);
       if (obj && obj.tool) return obj;
-    } catch (e) {
-      // It wasn't JSON, which means it's just talking. That's fine.
-    }
+    } catch (e) {}
     return null;
   }
 
@@ -316,7 +303,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       }
     }
 
-    // --- GITHUB TOOLS ---
     if (tool === "github_create_repo") {
       if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set in Cloudflare environment variables.";
       try {
@@ -404,7 +390,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
         return "Failed: " + e.message;
       }
     }
-    // -------------------
 
     if (tool === "remember") {
       const mem = (await this.ctx.storage.get("memory")) || [];
