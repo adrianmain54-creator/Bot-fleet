@@ -32,6 +32,21 @@ export default {
       return reg.fetch(new Request("https://registry/list_jobs"));
     }
 
+    // Handle bot deletion
+    if (url.pathname.startsWith("/api/bot/") && url.pathname.endsWith("/delete") && request.method === "POST") {
+      const name = decodeURIComponent(url.pathname.split('/')[3]);
+      // Remove from registry
+      const reg = env.BOT.get(env.BOT.idFromName("registry"));
+      await reg.fetch(new Request("https://registry/unregister", {
+        method: "POST",
+        body: JSON.stringify({ name })
+      }));
+      // Wipe the bot
+      const stub = env.BOT.get(env.BOT.idFromName(name));
+      await stub.fetch(new Request("https://bot/delete", { method: "POST" }));
+      return Response.json({ ok: true });
+    }
+
     const botMatch = url.pathname.match(/^\/api\/bot\/([^/]+)\/(.+)$/);
     if (botMatch) {
       const name = decodeURIComponent(botMatch[1]);
@@ -70,7 +85,9 @@ header button{margin-left:auto;background:none;border:1px solid var(--line);colo
 .bot-card{background:var(--bubble);border:1px solid var(--line);border-radius:14px;padding:14px 16px;margin-bottom:12px;display:flex;justify-content:space-between;align-items:center}
 .bot-card strong{font-size:15px}
 .bot-card .sub{color:var(--dim);font-size:13px;margin-top:2px}
-.bot-card button{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600}
+.bot-actions{display:flex;gap:8px;align-items:center}
+.bot-actions button.open-btn{background:var(--accent);color:#fff;border:none;border-radius:8px;padding:6px 12px;font-size:13px;font-weight:600}
+.bot-actions button.del-btn{background:none;border:1px solid var(--line);color:var(--dim);border-radius:8px;padding:6px 10px;font-size:13px;font-weight:600}
 .job-card{background:#0a0a0a;border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:10px;font-size:14px}
 .job-card strong{color:var(--accent);display:block;margin-bottom:4px}
 .job-card .meta{color:var(--dim);font-size:12px;margin-top:6px}
@@ -143,14 +160,22 @@ async function loadBots() {
   $('#list').innerHTML = bots.length ? bots.map(b => \`
     <div class="bot-card">
       <div><strong>\${b.name}</strong><div class="sub">\${(b.instructions||'no instructions').slice(0,60)}</div></div>
-      <button onclick="openBot('\${b.name}')">open</button>
+      <div class="bot-actions">
+        <button class="open-btn" onclick="openBot('\${b.name}')">open</button>
+        <button class="del-btn" onclick="deleteBot('\${b.name}')">✕</button>
+      </div>
     </div>\`).join('') : '<p style="color:var(--dim);text-align:center;margin-top:40px">No bots yet. Tap "+ new bot".</p>';
     
-  // Auto-open Chief on first load
   if (!hasAutoOpened && bots.find(b => b.name === 'chief')) {
     hasAutoOpened = true;
     openBot('chief');
   }
+}
+
+async function deleteBot(name) {
+  if (!confirm("Delete " + name + " forever?")) return;
+  await api('/api/bot/' + name + '/delete', { method: 'POST' });
+  loadBots();
 }
 
 async function loadJobs() {
@@ -258,6 +283,7 @@ $('#newBtn').onclick = async () => {
   loadBots();
 };
 window.openBot = openBot;
+window.deleteBot = deleteBot;
 switchTab('bots');
 </script>
 </body>
