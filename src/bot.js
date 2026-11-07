@@ -20,7 +20,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. When asked to build or test something, you MUST use execute_code or browser_test. If the test fails, analyze the error, rewrite the code, and test it AGAIN. Do not stop iterating until the test passes perfectly. Only give your final answer when the code runs flawlessly." }
+          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. You must ALWAYS respond with a JSON object when using a tool. Example: {\"tool\":\"execute_code\",\"language\":\"python\",\"code\":\"print('hello')\"}. Do not wrap it in markdown. Do not add text outside the JSON. If a test fails, analyze the error, rewrite the code, and test it AGAIN. Do not stop iterating until the test passes perfectly." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -146,23 +146,23 @@ export class BotDurableObject {
     const memory = (await this.ctx.storage.get("memory")) || [];
     const system = `You are "${this.name}", an autonomous AI worker.
 Instructions: ${this.instructions}
-You have these tools (call one by replying with ONLY a JSON object and nothing else):
-- {"tool":"search","query":"..."} — search the web
-- {"tool":"fetch","url":"..."} — read a webpage
-- {"tool":"execute_code","language":"python|javascript","code":"..."} — run code and see the output
-- {"tool":"browser_test","url":"...","script":"..."} — runs a Puppeteer script on a real browser
-- {"tool":"github_create_repo","name":"repo-name","description":"..."} — creates a new public repo
-- {"tool":"github_push_file","repo":"repo-name","path":"filename.py","content":"...","message":"commit message"} — pushes a file
-- {"tool":"github_read_file","repo":"repo-name","path":"filename.py"} — reads a file from your repo
-- {"tool":"remember","note":"..."} — save a fact to memory
-- {"tool":"recall"} — list memory
-- {"tool":"schedule","when":"ISO date","task":"..."} — schedule a future task
-- {"tool":"add_job","title":"...","description":"...","assigned_to":"..."} — add a task to the board
-- {"tool":"list_jobs"} — see all tasks on the board
-- {"tool":"update_job","id":"...","status":"done|in_progress"} — update a task
-- {"tool":"message_bot","target":"bot_name","message":"..."} — send a message to another bot
+You have these tools (you MUST reply with ONLY raw JSON to use a tool):
+- {"tool":"search","query":"..."}
+- {"tool":"fetch","url":"..."}
+- {"tool":"execute_code","language":"python|javascript","code":"..."}
+- {"tool":"browser_test","url":"...","script":"..."}
+- {"tool":"github_create_repo","name":"...","description":"..."}
+- {"tool":"github_push_file","repo":"...","path":"...","content":"...","message":"..."}
+- {"tool":"github_read_file","repo":"...","path":"..."}
+- {"tool":"remember","note":"..."}
+- {"tool":"schedule","when":"...","task":"..."}
+- {"tool":"add_job","title":"...","description":"...","assigned_to":"..."}
+- {"tool":"list_jobs"}
+- {"tool":"update_job","id":"...","status":"..."}
+- {"tool":"message_bot","target":"...","message":"..."}
 
-If no tool is needed, just answer normally in plain text (no JSON).
+CRITICAL: Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.
+If you just want to talk, reply in plain text.
 Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
 
     const messages = [
@@ -173,11 +173,13 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
 
     let raw = await this.askBrain(messages);
     let steps = 0;
-    const maxSteps = 15; // The perfection loop limit
+    const maxSteps = 15;
 
     while (steps < maxSteps) {
       const toolCall = this.parseTool(raw);
-      if (!toolCall) break; // No more tools to call. It is giving the final answer.
+      
+      // If it didn't call a tool, it's giving the final answer
+      if (!toolCall) break; 
       
       steps++;
       send({ type: "status", text: `Step ${steps}/${maxSteps}: Using ${toolCall.tool}...` });
@@ -189,7 +191,6 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       messages.push({ role: "assistant", content: raw });
       messages.push({ role: "user", content: `Tool result: ${result}` });
 
-      // Force it to keep going if it hits the step limit
       if (steps === maxSteps - 1) {
         messages.push({ role: "user", content: "You are almost out of steps. Stop testing and output your final answer now." });
       }
@@ -197,14 +198,36 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       raw = await this.askBrain(messages);
     }
 
+    // Clean up markdown if it tried to output JSON as the final answer
+    if (raw.trim().startsWith('{"tool"')) {
+       return "I ran into a formatting error and couldn't finish the task.";
+    }
+
     return raw;
   }
 
   parseTool(text) {
     try {
-      const obj = JSON.parse(text.trim());
+      let clean = text.trim();
+      
+      // 1. Strip markdown code blocks if the AI wrapped it in ```json
+      if (clean.startsWith('```')) {
+        clean = clean.replace(/^```[a-zA-Z]*\n/, '').replace(/```$/, '').trim();
+      }
+
+      // 2. Extract just the JSON object if there's conversational text around it
+      const firstBrace = clean.indexOf('{');
+      const lastBrace = clean.lastIndexOf('}');
+      
+      if (firstBrace !== -1 && lastBrace !== -1) {
+        clean = clean.substring(firstBrace, lastBrace + 1);
+      }
+
+      const obj = JSON.parse(clean);
       if (obj && obj.tool) return obj;
-    } catch {}
+    } catch (e) {
+      // It wasn't JSON, which means it's just talking. That's fine.
+    }
     return null;
   }
 
