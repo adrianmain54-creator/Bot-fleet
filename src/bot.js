@@ -20,7 +20,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief. You are an autonomous developer and researcher. If asked to build a project, write the code, use execute_code to test it, and once it works, use github_create_repo and github_push_file to save it. Always test your code first." }
+          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. When asked to build or test something, you MUST use execute_code or browser_test. If the test fails, analyze the error, rewrite the code, and test it AGAIN. Do not stop iterating until the test passes perfectly. Only give your final answer when the code runs flawlessly." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -150,8 +150,10 @@ You have these tools (call one by replying with ONLY a JSON object and nothing e
 - {"tool":"search","query":"..."} — search the web
 - {"tool":"fetch","url":"..."} — read a webpage
 - {"tool":"execute_code","language":"python|javascript","code":"..."} — run code and see the output
-- {"tool":"github_create_repo","name":"repo-name","description":"..."} — creates a new public repo on the user's GitHub
-- {"tool":"github_push_file","repo":"repo-name","path":"filename.py","content":"...","message":"commit message"} — pushes a file to the repo
+- {"tool":"browser_test","url":"...","script":"..."} — runs a Puppeteer script on a real browser
+- {"tool":"github_create_repo","name":"repo-name","description":"..."} — creates a new public repo
+- {"tool":"github_push_file","repo":"repo-name","path":"filename.py","content":"...","message":"commit message"} — pushes a file
+- {"tool":"github_read_file","repo":"repo-name","path":"filename.py"} — reads a file from your repo
 - {"tool":"remember","note":"..."} — save a fact to memory
 - {"tool":"recall"} — list memory
 - {"tool":"schedule","when":"ISO date","task":"..."} — schedule a future task
@@ -171,13 +173,14 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
 
     let raw = await this.askBrain(messages);
     let steps = 0;
+    const maxSteps = 15; // The perfection loop limit
 
-    while (steps < 15) {
-      steps++;
+    while (steps < maxSteps) {
       const toolCall = this.parseTool(raw);
-      if (!toolCall) break;
+      if (!toolCall) break; // No more tools to call. It is giving the final answer.
       
-      send({ type: "status", text: `Step ${steps}: Using ${toolCall.tool}...` });
+      steps++;
+      send({ type: "status", text: `Step ${steps}/${maxSteps}: Using ${toolCall.tool}...` });
       
       const result = await this.runTool(toolCall);
       
@@ -185,6 +188,12 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       
       messages.push({ role: "assistant", content: raw });
       messages.push({ role: "user", content: `Tool result: ${result}` });
+
+      // Force it to keep going if it hits the step limit
+      if (steps === maxSteps - 1) {
+        messages.push({ role: "user", content: "You are almost out of steps. Stop testing and output your final answer now." });
+      }
+      
       raw = await this.askBrain(messages);
     }
 
@@ -259,6 +268,31 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
       }
     }
 
+    if (tool === "browser_test") {
+      if (!this.env.BROWSERLESS_API_KEY) return "Error: You need to add BROWSERLESS_API_KEY to your Cloudflare variables to test browser actions.";
+      try {
+        const res = await fetch(`https://chrome.browserless.io/function?token=${this.env.BROWSERLESS_API_KEY}`, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            code: `
+              export default async function ({ page }) {
+                await page.goto('${args.url}');
+                ${args.script}
+                const html = await page.content();
+                return { data: html.slice(0, 2000), type: 'text/plain' };
+              }
+            `
+          })
+        });
+        const text = await res.text();
+        if (!res.ok) return "Browserless error: " + text;
+        return "Action succeeded. Resulting HTML snippet: " + text.slice(0, 1000);
+      } catch (e) {
+        return "Browser test failed: " + e.message;
+      }
+    }
+
     // --- GITHUB TOOLS ---
     if (tool === "github_create_repo") {
       if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set in Cloudflare environment variables.";
@@ -289,13 +323,11 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
     if (tool === "github_push_file") {
       if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set.";
       try {
-        // Get user to construct API URL
         const userRes = await fetch("https://api.github.com/user", {
           headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
         });
         const user = await userRes.json();
         
-        // Get current file SHA if it exists
         let sha = null;
         const checkRes = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
           headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
@@ -324,6 +356,27 @@ Long-term memory: ${memory.length ? memory.join("; ") : "empty"}`;
         
         if (!res.ok) return "GitHub error: " + (await res.text());
         return `File ${args.path} pushed successfully.`;
+      } catch (e) {
+        return "Failed: " + e.message;
+      }
+    }
+
+    if (tool === "github_read_file") {
+      if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set.";
+      try {
+        const userRes = await fetch("https://api.github.com/user", {
+          headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
+        });
+        const user = await userRes.json();
+
+        const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
+          headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
+        });
+        if (!res.ok) return "GitHub error: " + (await res.text());
+        const data = await res.json();
+        
+        const content = decodeURIComponent(escape(atob(data.content)));
+        return `File contents of ${args.path}:\n\n${content}`;
       } catch (e) {
         return "Failed: " + e.message;
       }
