@@ -66,9 +66,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V5">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V6">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V5</title>
+<title>Grok Fleet V6</title>
 <style>
   :root {
     color-scheme: dark;
@@ -125,13 +125,9 @@ const HTML = `<!doctype html>
   #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; }
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
   .msg { max-width: 85%; font-size: 16px; line-height: 1.5; animation: slideUp 0.3s ease-out; }
-  .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; }
+  .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; white-space: pre-wrap; }
   .msg.bot { align-self: flex-start; padding: 4px 0; white-space: pre-wrap; }
   .msg.system { font-size: 13px; color: var(--text-dim); font-family: var(--font-mono); background: var(--surface); padding: 10px; border-radius: 8px; align-self: center; max-width: 100%; white-space: pre-wrap; }
-  .msg code { background: var(--surface); padding: 2px 6px; border-radius: 6px; font-family: var(--font-mono); font-size: 0.9em; }
-  .msg pre { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; overflow-x: auto; margin: 8px 0; }
-  .msg pre code { background: none; padding: 0; }
-  .msg strong { color: #fff; font-weight: 600; }
   
   #chat-bar { 
     padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); 
@@ -178,7 +174,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
 <header id="main-header">
-  <div class="logo">Grok<span>Fleet V5</span></div>
+  <div class="logo">Grok<span>Fleet V6</span></div>
   <div style="display:flex; gap:8px; margin-left:auto;">
     <button class="btn-icon" id="btn-settings">⚙</button>
     <button class="btn-icon" id="btn-new-bot">+</button>
@@ -186,7 +182,7 @@ const HTML = `<!doctype html>
 </header>
 <div id="main">
   <div class="tabs">
-    <button id="tab-bots" class="active" onclick="switchTab('bots')">Agents</button>
+    <button id="tab-bots" class="active">Agents</button>
   </div>
   <div id="list"></div>
 </div>
@@ -203,7 +199,6 @@ const HTML = `<!doctype html>
   </div>
 </div>
 
-<!-- SETTINGS MODAL -->
 <div class="modal-overlay" id="modal-settings">
   <div class="modal-box">
     <h2>Settings</h2>
@@ -217,7 +212,6 @@ const HTML = `<!doctype html>
   </div>
 </div>
 
-<!-- NEW AGENT MODAL -->
 <div class="modal-overlay" id="modal-new-agent">
   <div class="modal-box">
     <h2>New Agent</h2>
@@ -231,104 +225,87 @@ const HTML = `<!doctype html>
 </div>
 
 <script>
-const $ = s => document.querySelector(s);
-let currentBot = null;
-let currentTab = 'bots';
-let hasAutoOpened = false;
-let pollInterval = null;
+var $ = function(s) { return document.querySelector(s); };
+var currentBot = null;
+var hasAutoOpened = false;
+var pollInterval = null;
 
-async function api(path, opts) {
-  const r = await fetch(path, opts);
-  if (!r.ok) throw new Error(await r.text());
-  return r.headers.get('content-type')?.includes('json') ? r.json() : r.text();
+function api(path, opts) {
+  return fetch(path, opts).then(function(r) {
+    if (!r.ok) throw new Error("Error " + r.status);
+    return r.headers.get('content-type').indexOf('json') > -1 ? r.json() : r.text();
+  });
 }
 
-function switchTab(tab) {
-  currentTab = tab;
-  if (tab === 'bots') loadBots();
-}
-
-async function loadBots() {
-  try {
-    const bots = await api('/api/bots');
+function loadBots() {
+  api('/api/bots').then(function(bots) {
     if (!Array.isArray(bots)) {
-       return $('#list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: Server returned invalid data. Tap ⚙ to reset.</p>';
+      $('#list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: Invalid data. Tap ⚙ to reset.</p>';
+      return;
     }
     
-    let html = '';
-    if (bots.length > 0) {
-      html = bots.map(function(b) {
-        return '<div class="bot-card">' +
-          '<div><h3>' + b.name + '</h3><p>' + (b.instructions||'').slice(0,60) + '</p></div>' +
-          '<div class="bot-actions">' +
-            '<button class="btn-open" onclick="openBot(\'' + b.name + '\')">Chat</button>' +
-            '<button class="btn-del" onclick="deleteBot(\'' + b.name + '\')">✕</button>' +
-          '</div>' +
-        '</div>';
-      }).join('');
-    } else {
-      html = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
+    if (bots.length === 0) {
+      $('#list').innerHTML = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
+      return;
+    }
+
+    var html = '';
+    for (var i = 0; i < bots.length; i++) {
+      var b = bots[i];
+      html += '<div class="bot-card">';
+      html += '<div><h3>' + b.name + '</h3><p>' + (b.instructions || '').slice(0,60) + '</p></div>';
+      html += '<div class="bot-actions">';
+      html += '<button class="btn-open" onclick="openBot(\\'' + b.name + '\\')">Chat</button>';
+      html += '<button class="btn-del" onclick="deleteBot(\\'' + b.name + '\\')">✕</button>';
+      html += '</div></div>';
     }
     $('#list').innerHTML = html;
     
-    if (!hasAutoOpened && bots.find(b => b.name === 'chief')) {
+    if (!hasAutoOpened && bots[0]) {
       hasAutoOpened = true;
       openBot('chief');
     }
-  } catch (err) {
+  }).catch(function(err) {
     $('#list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: ' + err.message + '</p>';
-  }
+  });
 }
 
-async function deleteBot(name) {
+function deleteBot(name) {
   if (!confirm("Delete " + name + " forever?")) return;
-  await api('/api/bot/' + name + '/delete', { method: 'POST' });
-  loadBots();
+  api('/api/bot/' + name + '/delete', { method: 'POST' }).then(function() { loadBots(); });
 }
 
-async function openBot(name) {
+function openBot(name) {
   currentBot = name;
   $('#main').style.display = 'none';
   $('#main-header').style.display = 'none';
   $('#chat').style.display = 'flex';
   $('#chat-title').textContent = name;
-  await loadLog();
+  loadLog();
 }
 
-async function loadLog() {
-  try {
-    const data = await api('/api/bot/' + encodeURIComponent(currentBot) + '/messages');
-    const log = $('#chat-log');
-    
-    let html = '';
-    for (let i=0; i<data.messages.length; i++) {
-      const m = data.messages[i];
-      if (m.role === 'system') {
-        html += '<div class="msg system">' + esc(m.content) + '</div>';
-      } else {
-        html += '<div class="msg ' + m.role + '">' + (m.role === 'assistant' ? md(m.content) : esc(m.content)) + '</div>';
-      }
+function loadLog() {
+  api('/api/bot/' + encodeURIComponent(currentBot) + '/messages').then(function(data) {
+    var log = $('#chat-log');
+    var html = '';
+    for (var i = 0; i < data.messages.length; i++) {
+      var m = data.messages[i];
+      var cls = m.role === 'assistant' ? 'bot' : m.role;
+      html += '<div class="msg ' + cls + '">' + esc(m.content) + '</div>';
     }
     log.innerHTML = html;
     log.scrollTop = log.scrollHeight;
 
     if (data.status === 'working') {
-      if (!pollInterval) {
-        pollInterval = setInterval(loadLog, 3000);
-      }
+      if (!pollInterval) pollInterval = setInterval(loadLog, 3000);
       $('#chat-send').disabled = true;
       $('#chat-input').placeholder = "Working in background...";
     } else {
-      if (pollInterval) {
-        clearInterval(pollInterval);
-        pollInterval = null;
-      }
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
       $('#chat-send').disabled = false;
       $('#chat-input').placeholder = "Message...";
     }
-  } catch (e) {
-    console.error(e);
-  }
+  }).catch(function(e) { console.log(e); });
 }
 
 function esc(s) {
@@ -338,45 +315,32 @@ function esc(s) {
   });
 }
 
-function md(raw) {
-  if (typeof raw !== 'string') return '';
-  let s = esc(raw);
-  s = s.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, function(_, c) { return '<pre><code>' + c.replace(/^\\n/, '') + '</code></pre>'; });
-  s = s.replace(/\`([^\`\\n]+)\`/g, '<code>$1</code>');
-  s = s.replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>');
-  return s;
-}
-
-async function send() {
-  const text = $('#chat-input').value.trim();
+function send() {
+  var text = $('#chat-input').value.trim();
   if (!text || !currentBot) return;
-  $('#chat-input').value = ''; $('#chat-input').style.height = 'auto';
+  $('#chat-input').value = ''; 
+  $('#chat-input').style.height = 'auto';
   
-  const log = $('#chat-log');
-  const u = document.createElement('div');
+  var log = $('#chat-log');
+  var u = document.createElement('div');
   u.className = 'msg user'; u.textContent = text;
   log.appendChild(u); log.scrollTop = log.scrollHeight;
 
-  try {
-    await fetch('/api/bot/' + encodeURIComponent(currentBot) + '/message', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ message: text }),
-    });
-    loadLog();
-  } catch (e) {
-    alert('Error: ' + e.message);
-  }
+  api('/api/bot/' + encodeURIComponent(currentBot) + '/message', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ message: text })
+  }).then(function() { loadLog(); }).catch(function(e) { alert('Error: ' + e.message); });
 }
 
 $('#chat-send').onclick = send;
-$('#chat-input').addEventListener('keydown', function(e) {
+$('#chat-input').onkeydown = function(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
-});
-$('#chat-input').addEventListener('input', function() {
+};
+$('#chat-input').oninput = function() {
   $('#chat-input').style.height = 'auto';
   $('#chat-input').style.height = Math.min($('#chat-input').scrollHeight, 120) + 'px';
-});
+};
 
 $('#btn-back').onclick = function() {
   currentBot = null;
@@ -387,62 +351,54 @@ $('#btn-back').onclick = function() {
   loadBots();
 };
 
-// NEW AGENT MODAL LOGIC
 $('#btn-new-bot').onclick = function() {
   $('#input-agent-name').value = '';
   $('#input-agent-instructions').value = '';
   $('#modal-new-agent').style.display = 'flex';
 };
 
-async function createAgent() {
-  const name = $('#input-agent-name').value.trim();
-  const instructions = $('#input-agent-instructions').value.trim();
+function createAgent() {
+  var name = $('#input-agent-name').value.trim();
+  var instructions = $('#input-agent-instructions').value.trim();
   if (!name) return alert('Name is required');
   
-  await api('/api/bots', {
+  api('/api/bots', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ name, instructions }),
-  });
-  closeModal('modal-new-agent');
-  loadBots();
+    body: JSON.stringify({ name: name, instructions: instructions })
+  }).then(function() {
+    closeModal('modal-new-agent');
+    loadBots();
+  }).catch(function(e) { alert(e.message); });
 }
 
-// SETTINGS MODAL LOGIC
-$('#btn-settings').onclick = async function() {
-  const data = await api('/api/settings');
-  if (data.token) $('#input-github-token').value = data.token;
-  $('#modal-settings').style.display = 'flex';
+$('#btn-settings').onclick = function() {
+  api('/api/settings').then(function(data) {
+    if (data.token) $('#input-github-token').value = data.token;
+    $('#modal-settings').style.display = 'flex';
+  });
 };
 
-async function saveSettings() {
-  const token = $('#input-github-token').value.trim();
-  await api('/api/settings', {
+function saveSettings() {
+  var token = $('#input-github-token').value.trim();
+  api('/api/settings', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ token })
-  });
-  closeModal('modal-settings');
+    body: JSON.stringify({ token: token })
+  }).then(function() { closeModal('modal-settings'); });
 }
 
-async function resetApp() {
+function resetApp() {
   if (!confirm("Reset all bots and history?")) return;
-  await fetch('/api/reset');
-  location.reload();
+  fetch('/api/reset').then(function() { location.reload(); });
 }
 
 function closeModal(id) {
   $('#' + id).style.display = 'none';
 }
 
-window.openBot = openBot;
-window.deleteBot = deleteBot;
-window.closeModal = closeModal;
-window.saveSettings = saveSettings;
-window.createAgent = createAgent;
-window.resetApp = resetApp;
-
-switchTab('bots');
+// Load the bots on startup
+loadBots();
 </script>
 </body>
 </html>`;
