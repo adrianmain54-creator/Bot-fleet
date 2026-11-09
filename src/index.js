@@ -66,9 +66,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V6">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V7">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V6</title>
+<title>Grok Fleet V7</title>
 <style>
   :root {
     color-scheme: dark;
@@ -129,6 +129,14 @@ const HTML = `<!doctype html>
   .msg.bot { align-self: flex-start; padding: 4px 0; white-space: pre-wrap; }
   .msg.system { font-size: 13px; color: var(--text-dim); font-family: var(--font-mono); background: var(--surface); padding: 10px; border-radius: 8px; align-self: center; max-width: 100%; white-space: pre-wrap; }
   
+  /* THINKING SPINNER */
+  .thinking-box {
+    align-self: flex-start; display: flex; align-items: center; gap: 10px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
+    padding: 12px 16px; font-size: 14px; color: var(--text-dim);
+  }
+  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  
   #chat-bar { 
     padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); 
     background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -170,11 +178,12 @@ const HTML = `<!doctype html>
   .btn-save { background: var(--text); color: var(--bg); }
   .btn-danger { background: #ff453a22; color: #ff453a; border: 1px solid #ff453a55; width: 100%; margin-top: 10px; }
   @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
 </head>
 <body>
 <header id="main-header">
-  <div class="logo">Grok<span>Fleet V6</span></div>
+  <div class="logo">Grok<span>Fleet V7</span></div>
   <div style="display:flex; gap:8px; margin-left:auto;">
     <button class="btn-icon" id="btn-settings">⚙</button>
     <button class="btn-icon" id="btn-new-bot">+</button>
@@ -293,6 +302,12 @@ function loadLog() {
       var cls = m.role === 'assistant' ? 'bot' : m.role;
       html += '<div class="msg ' + cls + '">' + esc(m.content) + '</div>';
     }
+    
+    // ADD THE THINKING BOX IF WORKING
+    if (data.status === 'working') {
+      html += '<div class="thinking-box"><div class="spinner"></div> Agent is thinking...</div>';
+    }
+    
     log.innerHTML = html;
     log.scrollTop = log.scrollHeight;
 
@@ -397,7 +412,6 @@ function closeModal(id) {
   $('#' + id).style.display = 'none';
 }
 
-// Load the bots on startup
 loadBots();
 </script>
 </body>
