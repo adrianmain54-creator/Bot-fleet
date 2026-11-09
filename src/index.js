@@ -265,7 +265,10 @@ function sendMessage() {
           return;
         }
         buf += dec.decode(r.value, { stream: true });
-        var lines = buf.split('\n'); buf = lines.pop();
+        
+        // THE FIX: Escaped the backslash so it doesn't break the HTML
+        var lines = buf.split('\\n'); buf = lines.pop();
+        
         for (var i = 0; i < lines.length; i++) {
           if (!lines[i].trim()) continue;
           try {
@@ -278,7 +281,7 @@ function sendMessage() {
               summaryEl.textContent = 'Processed steps';
             }
             if (o.type === 'delta') { acc += o.text; botEl.textContent = acc; }
-            if (o.type === 'error') { acc += '\n\n' + o.text; botEl.textContent = acc; }
+            if (o.type === 'error') { acc += '\\n\\n' + o.text; botEl.textContent = acc; }
           } catch (e) {}
         }
         log.scrollTop = log.scrollHeight;
