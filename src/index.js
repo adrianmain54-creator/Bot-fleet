@@ -60,9 +60,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V3">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V4">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V3</title>
+<title>Grok Fleet V4</title>
 <style>
   :root {
     color-scheme: dark;
@@ -114,6 +114,7 @@ const HTML = `<!doctype html>
   .bot-actions { display: flex; gap: 8px; align-items: center; }
   .btn-open { background: var(--text); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; }
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
+  
   #chat { display: none; flex-direction: column; height: 100%; background: var(--bg); position: relative; }
   #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; }
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
@@ -125,6 +126,7 @@ const HTML = `<!doctype html>
   .msg pre { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; overflow-x: auto; margin: 8px 0; }
   .msg pre code { background: none; padding: 0; }
   .msg strong { color: #fff; font-weight: 600; }
+  
   #chat-bar { 
     padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); 
     background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -142,7 +144,8 @@ const HTML = `<!doctype html>
   }
   #chat-send:active { transform: scale(0.9); }
   #chat-send:disabled { opacity: 0.3; }
-  #modal-settings {
+  
+  .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100;
     align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(10px);
   }
@@ -152,13 +155,15 @@ const HTML = `<!doctype html>
   }
   .modal-box h2 { margin: 0 0 8px 0; font-size: 20px; }
   .modal-box p { margin: 0 0 16px 0; font-size: 14px; color: var(--text-dim); }
-  .modal-box input {
+  .modal-box input, .modal-box textarea {
     width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
-    padding: 12px; border-radius: 8px; font-family: var(--font-mono); margin-bottom: 16px; outline: none;
+    padding: 12px; border-radius: 8px; font-family: var(--font-sys); margin-bottom: 16px; outline: none;
+    font-size: 15px;
   }
-  .modal-box input:focus { border-color: #444; }
+  .modal-box textarea { resize: vertical; min-height: 80px; }
+  .modal-box input:focus, .modal-box textarea:focus { border-color: #444; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
-  .modal-actions button { padding: 10px 16px; border-radius: 8px; font-weight: 600; border: none; font-size: 14px; }
+  .modal-actions button { padding: 10px 16px; border-radius: 8px; font-weight: 600; border: none; font-size: 14px; cursor: pointer; }
   .btn-cancel { background: transparent; color: var(--text-dim); }
   .btn-save { background: var(--text); color: var(--bg); }
   @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -166,7 +171,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
 <header id="main-header">
-  <div class="logo">Grok<span>Fleet V3</span></div>
+  <div class="logo">Grok<span>Fleet V4</span></div>
   <div style="display:flex; gap:8px; margin-left:auto;">
     <button class="btn-icon" id="btn-settings">⚙</button>
     <button class="btn-icon" id="btn-new-bot">+</button>
@@ -190,17 +195,33 @@ const HTML = `<!doctype html>
     <button id="chat-send">↑</button>
   </div>
 </div>
-<div id="modal-settings">
+
+<!-- SETTINGS MODAL -->
+<div class="modal-overlay" id="modal-settings">
   <div class="modal-box">
     <h2>Settings</h2>
     <p>Paste your GitHub Personal Access Token.</p>
     <input type="password" id="input-github-token" placeholder="ghp_..." autocomplete="off" spellcheck="false">
     <div class="modal-actions">
-      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="btn-cancel" onclick="closeModal('modal-settings')">Cancel</button>
       <button class="btn-save" onclick="saveSettings()">Save</button>
     </div>
   </div>
 </div>
+
+<!-- NEW AGENT MODAL -->
+<div class="modal-overlay" id="modal-new-agent">
+  <div class="modal-box">
+    <h2>New Agent</h2>
+    <input type="text" id="input-agent-name" placeholder="Name (no spaces)" autocomplete="off" spellcheck="false">
+    <textarea id="input-agent-instructions" placeholder="Instructions (e.g. You are a researcher...)"></textarea>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeModal('modal-new-agent')">Cancel</button>
+      <button class="btn-save" onclick="createAgent()">Create</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 let currentBot = null;
@@ -220,26 +241,30 @@ function switchTab(tab) {
 }
 
 async function loadBots() {
-  const bots = await api('/api/bots');
-  let html = '';
-  if (bots.length) {
-    html = bots.map(function(b) {
-      return '<div class="bot-card">' +
-        '<div><h3>' + b.name + '</h3><p>' + (b.instructions||'').slice(0,60) + '</p></div>' +
-        '<div class="bot-actions">' +
-          '<button class="btn-open" onclick="openBot(\'' + b.name + '\')">Chat</button>' +
-          '<button class="btn-del" onclick="deleteBot(\'' + b.name + '\')">✕</button>' +
-        '</div>' +
-      '</div>';
-    }).join('');
-  } else {
-    html = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
-  }
-  $('#list').innerHTML = html;
-  
-  if (!hasAutoOpened && bots.find(b => b.name === 'chief')) {
-    hasAutoOpened = true;
-    openBot('chief');
+  try {
+    const bots = await api('/api/bots');
+    let html = '';
+    if (bots && bots.length > 0) {
+      html = bots.map(function(b) {
+        return '<div class="bot-card">' +
+          '<div><h3>' + b.name + '</h3><p>' + (b.instructions||'').slice(0,60) + '</p></div>' +
+          '<div class="bot-actions">' +
+            '<button class="btn-open" onclick="openBot(\'' + b.name + '\')">Chat</button>' +
+            '<button class="btn-del" onclick="deleteBot(\'' + b.name + '\')">✕</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    } else {
+      html = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
+    }
+    $('#list').innerHTML = html;
+    
+    if (!hasAutoOpened && bots && bots.find(b => b.name === 'chief')) {
+      hasAutoOpened = true;
+      openBot('chief');
+    }
+  } catch (err) {
+    $('#list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: ' + err.message + '</p>';
   }
 }
 
@@ -300,12 +325,9 @@ function esc(s) {
 function md(raw) {
   if (typeof raw !== 'string') return '';
   let s = esc(raw);
-  
-  // FIX: Escaped the backticks here so they don't break the string
   s = s.replace(/\`\`\`([\s\S]*?)\`\`\`/g, function(_, c) { return '<pre><code>' + c.replace(/^\n/, '') + '</code></pre>'; });
   s = s.replace(/\`([^\`\n]+)\`/g, '<code>$1</code>');
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
-  
   return s;
 }
 
@@ -349,25 +371,33 @@ $('#btn-back').onclick = function() {
   loadBots();
 };
 
-$('#btn-new-bot').onclick = async function() {
-  const name = prompt('Agent Name (no spaces):');
-  if (!name) return;
-  const instructions = prompt('System Instructions:') || '';
+// NEW AGENT MODAL LOGIC
+$('#btn-new-bot').onclick = function() {
+  $('#input-agent-name').value = '';
+  $('#input-agent-instructions').value = '';
+  $('#modal-new-agent').style.display = 'flex';
+};
+
+async function createAgent() {
+  const name = $('#input-agent-name').value.trim();
+  const instructions = $('#input-agent-instructions').value.trim();
+  if (!name) return alert('Name is required');
+  
   await api('/api/bots', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ name, instructions }),
   });
+  closeModal('modal-new-agent');
   loadBots();
-};
+}
 
+// SETTINGS MODAL LOGIC
 $('#btn-settings').onclick = async function() {
   const data = await api('/api/settings');
   if (data.token) $('#input-github-token').value = data.token;
   $('#modal-settings').style.display = 'flex';
 };
-
-function closeSettings() { $('#modal-settings').style.display = 'none'; }
 
 async function saveSettings() {
   const token = $('#input-github-token').value.trim();
@@ -376,13 +406,19 @@ async function saveSettings() {
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ token })
   });
-  closeSettings();
+  closeModal('modal-settings');
+}
+
+function closeModal(id) {
+  $('#' + id).style.display = 'none';
 }
 
 window.openBot = openBot;
 window.deleteBot = deleteBot;
-window.closeSettings = closeSettings;
+window.closeModal = closeModal;
 window.saveSettings = saveSettings;
+window.createAgent = createAgent;
+
 switchTab('bots');
 </script>
 </body>
