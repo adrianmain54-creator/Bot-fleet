@@ -48,7 +48,7 @@ export default {
       return stub.fetch(new Request(target, request));
     }
 
-    return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
+    return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   },
 };
 
@@ -266,7 +266,7 @@ function sendMessage() {
         }
         buf += dec.decode(r.value, { stream: true });
         
-        // THE FIX: Escaped the backslash so it doesn't break the HTML
+        // FIXED: Escaped backslash
         var lines = buf.split('\\n'); buf = lines.pop();
         
         for (var i = 0; i < lines.length; i++) {
@@ -281,7 +281,10 @@ function sendMessage() {
               summaryEl.textContent = 'Processed steps';
             }
             if (o.type === 'delta') { acc += o.text; botEl.textContent = acc; }
+            
+            // FIXED: Escaped backslash
             if (o.type === 'error') { acc += '\\n\\n' + o.text; botEl.textContent = acc; }
+            
           } catch (e) {}
         }
         log.scrollTop = log.scrollHeight;
