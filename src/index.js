@@ -6,6 +6,12 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
 
+    if (url.pathname === "/api/reset") {
+      const reg = env.BOT.get(env.BOT.idFromName("registry"));
+      await reg.fetch(new Request("https://registry/reset"));
+      return Response.json({ ok: true });
+    }
+
     if (url.pathname === "/api/bots" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/ensure_defaults"));
@@ -60,9 +66,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V4">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V5">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V4</title>
+<title>Grok Fleet V5</title>
 <style>
   :root {
     color-scheme: dark;
@@ -166,12 +172,13 @@ const HTML = `<!doctype html>
   .modal-actions button { padding: 10px 16px; border-radius: 8px; font-weight: 600; border: none; font-size: 14px; cursor: pointer; }
   .btn-cancel { background: transparent; color: var(--text-dim); }
   .btn-save { background: var(--text); color: var(--bg); }
+  .btn-danger { background: #ff453a22; color: #ff453a; border: 1px solid #ff453a55; width: 100%; margin-top: 10px; }
   @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
 <header id="main-header">
-  <div class="logo">Grok<span>Fleet V4</span></div>
+  <div class="logo">Grok<span>Fleet V5</span></div>
   <div style="display:flex; gap:8px; margin-left:auto;">
     <button class="btn-icon" id="btn-settings">⚙</button>
     <button class="btn-icon" id="btn-new-bot">+</button>
@@ -202,10 +209,11 @@ const HTML = `<!doctype html>
     <h2>Settings</h2>
     <p>Paste your GitHub Personal Access Token.</p>
     <input type="password" id="input-github-token" placeholder="ghp_..." autocomplete="off" spellcheck="false">
-    <div class="modal-actions">
+    <div class="modal-actions" style="margin-bottom:10px;">
       <button class="btn-cancel" onclick="closeModal('modal-settings')">Cancel</button>
       <button class="btn-save" onclick="saveSettings()">Save</button>
     </div>
+    <button class="btn-danger" onclick="resetApp()">Reset App (Deletes everything)</button>
   </div>
 </div>
 
@@ -243,8 +251,12 @@ function switchTab(tab) {
 async function loadBots() {
   try {
     const bots = await api('/api/bots');
+    if (!Array.isArray(bots)) {
+       return $('#list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: Server returned invalid data. Tap ⚙ to reset.</p>';
+    }
+    
     let html = '';
-    if (bots && bots.length > 0) {
+    if (bots.length > 0) {
       html = bots.map(function(b) {
         return '<div class="bot-card">' +
           '<div><h3>' + b.name + '</h3><p>' + (b.instructions||'').slice(0,60) + '</p></div>' +
@@ -259,7 +271,7 @@ async function loadBots() {
     }
     $('#list').innerHTML = html;
     
-    if (!hasAutoOpened && bots && bots.find(b => b.name === 'chief')) {
+    if (!hasAutoOpened && bots.find(b => b.name === 'chief')) {
       hasAutoOpened = true;
       openBot('chief');
     }
@@ -284,34 +296,38 @@ async function openBot(name) {
 }
 
 async function loadLog() {
-  const data = await api('/api/bot/' + encodeURIComponent(currentBot) + '/messages');
-  const log = $('#chat-log');
-  
-  let html = '';
-  for (let i=0; i<data.messages.length; i++) {
-    const m = data.messages[i];
-    if (m.role === 'system') {
-      html += '<div class="msg system">' + esc(m.content) + '</div>';
-    } else {
-      html += '<div class="msg ' + m.role + '">' + (m.role === 'assistant' ? md(m.content) : esc(m.content)) + '</div>';
+  try {
+    const data = await api('/api/bot/' + encodeURIComponent(currentBot) + '/messages');
+    const log = $('#chat-log');
+    
+    let html = '';
+    for (let i=0; i<data.messages.length; i++) {
+      const m = data.messages[i];
+      if (m.role === 'system') {
+        html += '<div class="msg system">' + esc(m.content) + '</div>';
+      } else {
+        html += '<div class="msg ' + m.role + '">' + (m.role === 'assistant' ? md(m.content) : esc(m.content)) + '</div>';
+      }
     }
-  }
-  log.innerHTML = html;
-  log.scrollTop = log.scrollHeight;
+    log.innerHTML = html;
+    log.scrollTop = log.scrollHeight;
 
-  if (data.status === 'working') {
-    if (!pollInterval) {
-      pollInterval = setInterval(loadLog, 3000);
+    if (data.status === 'working') {
+      if (!pollInterval) {
+        pollInterval = setInterval(loadLog, 3000);
+      }
+      $('#chat-send').disabled = true;
+      $('#chat-input').placeholder = "Working in background...";
+    } else {
+      if (pollInterval) {
+        clearInterval(pollInterval);
+        pollInterval = null;
+      }
+      $('#chat-send').disabled = false;
+      $('#chat-input').placeholder = "Message...";
     }
-    $('#chat-send').disabled = true;
-    $('#chat-input').placeholder = "Working in background...";
-  } else {
-    if (pollInterval) {
-      clearInterval(pollInterval);
-      pollInterval = null;
-    }
-    $('#chat-send').disabled = false;
-    $('#chat-input').placeholder = "Message...";
+  } catch (e) {
+    console.error(e);
   }
 }
 
@@ -325,9 +341,9 @@ function esc(s) {
 function md(raw) {
   if (typeof raw !== 'string') return '';
   let s = esc(raw);
-  s = s.replace(/\`\`\`([\s\S]*?)\`\`\`/g, function(_, c) { return '<pre><code>' + c.replace(/^\n/, '') + '</code></pre>'; });
-  s = s.replace(/\`([^\`\n]+)\`/g, '<code>$1</code>');
-  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  s = s.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, function(_, c) { return '<pre><code>' + c.replace(/^\\n/, '') + '</code></pre>'; });
+  s = s.replace(/\`([^\`\\n]+)\`/g, '<code>$1</code>');
+  s = s.replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>');
   return s;
 }
 
@@ -409,6 +425,12 @@ async function saveSettings() {
   closeModal('modal-settings');
 }
 
+async function resetApp() {
+  if (!confirm("Reset all bots and history?")) return;
+  await fetch('/api/reset');
+  location.reload();
+}
+
 function closeModal(id) {
   $('#' + id).style.display = 'none';
 }
@@ -418,6 +440,7 @@ window.deleteBot = deleteBot;
 window.closeModal = closeModal;
 window.saveSettings = saveSettings;
 window.createAgent = createAgent;
+window.resetApp = resetApp;
 
 switchTab('bots');
 </script>
