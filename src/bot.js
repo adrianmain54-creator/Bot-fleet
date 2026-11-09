@@ -19,7 +19,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief. You are a helpful, conversational AI. If the user says hello or asks a question, just reply normally. ONLY use your tools if the user asks you to build something, search the web, or write code. Do not build things unprompted." }
+          { name: "chief", instructions: "You are the Chief. You are a helpful, conversational AI. If the user says hello or asks a question, just reply normally. ONLY use your tools if the user asks you to build something, search the web, or write code. Do not build things unprompted. If you crash or lose your train of thought, use github_list_files to see what you've already built." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -161,6 +161,7 @@ CRITICAL RULES:
 1. If the user just says hello or asks a normal question, reply normally in plain text. DO NOT use tools.
 2. ONLY use tools if the user explicitly asks you to build something, search, or execute code.
 3. DO NOT write massive blocks of code in the chat. Use github_create_repo and github_push_file to actually build things.
+4. When you are completely finished with the task, stop using tools and output a final plain-text summary of what you did.
 
 You have these tools (you MUST reply with ONLY raw JSON to use a tool):
 - {"tool":"search","query":"..."}
@@ -169,6 +170,7 @@ You have these tools (you MUST reply with ONLY raw JSON to use a tool):
 - {"tool":"github_create_repo","name":"...","description":"..."}
 - {"tool":"github_push_file","repo":"...","path":"...","content":"...","message":"..."}
 - {"tool":"github_read_file","repo":"...","path":"..."}
+- {"tool":"github_list_files","repo":"..."}
 - {"tool":"remember","note":"..."}
 - {"tool":"schedule","when":"...","task":"..."}
 
@@ -182,9 +184,8 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
     let raw = await this.askBrain(messages);
     let steps = 0;
-    const maxSteps = 10;
 
-    while (steps < maxSteps) {
+    while (true) {
       const toolCall = this.parseTool(raw);
       if (!toolCall) break; 
       
@@ -207,11 +208,6 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
          raw = "I experienced an internal error generating a response.";
          break;
       }
-    }
-
-    // If it hit the step limit but was successfully doing things
-    if (steps >= maxSteps) {
-       return "I hit my limit of " + maxSteps + " steps, but I completed the work! You can check your GitHub to see the results.";
     }
 
     if (raw.trim().startsWith('{"tool"')) {
@@ -370,6 +366,28 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
         
         const content = decodeURIComponent(escape(atob(data.content)));
         return `File contents of ${args.path}:\n\n${content}`;
+      } catch (e) {
+        return "Failed: " + e.message;
+      }
+    }
+
+    if (tool === "github_list_files") {
+      const token = await this.getGithubToken();
+      if (!token) return "Error: GITHUB_TOKEN is not set.";
+      try {
+        const userRes = await fetch("https://api.github.com/user", {
+          headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" }
+        });
+        const user = await userRes.json();
+
+        const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/git/trees/main?recursive=1`, {
+          headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" }
+        });
+        if (!res.ok) return "GitHub error: " + (await res.text());
+        const data = await res.json();
+        
+        const files = data.tree.filter(item => item.type === "blob").map(item => item.path);
+        return `Files in ${args.repo}:\n` + files.join("\n");
       } catch (e) {
         return "Failed: " + e.message;
       }
