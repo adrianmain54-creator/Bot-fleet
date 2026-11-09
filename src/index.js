@@ -66,9 +66,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V7">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V8">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V7</title>
+<title>Grok Fleet V8</title>
 <style>
   :root {
     color-scheme: dark;
@@ -86,7 +86,7 @@ const HTML = `<!doctype html>
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font-sys); overflow: hidden; }
-  body { display: flex; flex-direction: column; height: 100dvh; }
+  body { display: flex; flex-direction: column; height: 100dvh; }i
   header {
     display: flex; align-items: center; gap: 12px;
     padding: calc(env(safe-area-inset-top) + 12px) 20px 12px;
@@ -127,15 +127,21 @@ const HTML = `<!doctype html>
   .msg { max-width: 85%; font-size: 16px; line-height: 1.5; animation: slideUp 0.3s ease-out; }
   .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; white-space: pre-wrap; }
   .msg.bot { align-self: flex-start; padding: 4px 0; white-space: pre-wrap; }
-  .msg.system { font-size: 13px; color: var(--text-dim); font-family: var(--font-mono); background: var(--surface); padding: 10px; border-radius: 8px; align-self: center; max-width: 100%; white-space: pre-wrap; }
   
-  /* THINKING SPINNER */
-  .thinking-box {
-    align-self: flex-start; display: flex; align-items: center; gap: 10px;
-    background: var(--surface); border: 1px solid var(--border); border-radius: 12px;
-    padding: 12px 16px; font-size: 14px; color: var(--text-dim);
+  /* THE THOUGHTS DROPDOWN */
+  .thoughts {
+    align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; margin-bottom: 4px; font-size: 13px; animation: fadeIn 0.3s;
   }
-  .spinner { width: 14px; height: 14px; border: 2px solid var(--border); border-top-color: var(--accent); border-radius: 50%; animation: spin 1s linear infinite; }
+  .thoughts summary {
+    padding: 10px 14px; cursor: pointer; color: var(--text-dim); font-weight: 500; list-style: none;
+    display: flex; align-items: center; gap: 8px; outline: none;
+  }
+  .thoughts summary::-webkit-details-marker { display: none; }
+  .thoughts summary:before { content: "▶"; font-size: 10px; transition: transform 0.2s; }
+  .thoughts[open] summary:before { transform: rotate(90deg); }
+  .thoughts .content { padding: 0 14px 14px; font-family: var(--font-mono); color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
+  .thoughts .content div { margin-bottom: 6px; }
   
   #chat-bar { 
     padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); 
@@ -183,7 +189,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
 <header id="main-header">
-  <div class="logo">Grok<span>Fleet V7</span></div>
+  <div class="logo">Grok<span>Fleet V8</span></div>
   <div style="display:flex; gap:8px; margin-left:auto;">
     <button class="btn-icon" id="btn-settings">⚙</button>
     <button class="btn-icon" id="btn-new-bot">+</button>
@@ -299,13 +305,38 @@ function loadLog() {
     var html = '';
     for (var i = 0; i < data.messages.length; i++) {
       var m = data.messages[i];
-      var cls = m.role === 'assistant' ? 'bot' : m.role;
-      html += '<div class="msg ' + cls + '">' + esc(m.content) + '</div>';
+      
+      if (m.role === 'system' && m.content.startsWith('Thoughts:')) {
+        // RENDER PAST THOUGHTS AS A CLOSED DROPDOWN
+        var lines = m.content.split('\n').slice(1);
+        html += '<details class="thoughts">';
+        html += '<summary>Processed steps</summary>';
+        html += '<div class="content">';
+        for (var j = 0; j < lines.length; j++) {
+          if (lines[j].trim()) html += '<div>' + esc(lines[j]) + '</div>';
+        }
+        html += '</div></details>';
+      } else if (m.role === 'system') {
+        html += '<div class="msg system" style="text-align:center;font-size:12px;color:var(--text-dim);margin:10px 0">' + esc(m.content) + '</div>';
+      } else {
+        var cls = m.role === 'assistant' ? 'bot' : m.role;
+        html += '<div class="msg ' + cls + '">' + esc(m.content) + '</div>';
+      }
     }
     
-    // ADD THE THINKING BOX IF WORKING
+    // RENDER LIVE THOUGHTS IF WORKING
     if (data.status === 'working') {
-      html += '<div class="thinking-box"><div class="spinner"></div> Agent is thinking...</div>';
+      if (data.live_thoughts && data.live_thoughts.length > 0) {
+        html += '<details class="thoughts" open>';
+        html += '<summary>Thinking...</summary>';
+        html += '<div class="content">';
+        for (var k = 0; k < data.live_thoughts.length; k++) {
+          html += '<div>' + esc(data.live_thoughts[k]) + '</div>';
+        }
+        html += '</div></details>';
+      } else {
+        html += '<div class="msg bot" style="color:var(--text-dim)">Thinking...</div>';
+      }
     }
     
     log.innerHTML = html;
