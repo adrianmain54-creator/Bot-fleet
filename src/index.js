@@ -300,9 +300,12 @@ function esc(s) {
 function md(raw) {
   if (typeof raw !== 'string') return '';
   let s = esc(raw);
-  s = s.replace(/```([\s\S]*?)```/g, function(_, c) { return '<pre><code>' + c.replace(/^\n/, '') + '</code></pre>'; });
-  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  
+  // FIX: Escaped the backticks here so they don't break the string
+  s = s.replace(/\`\`\`([\s\S]*?)\`\`\`/g, function(_, c) { return '<pre><code>' + c.replace(/^\n/, '') + '</code></pre>'; });
+  s = s.replace(/\`([^\`\n]+)\`/g, '<code>$1</code>');
   s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  
   return s;
 }
 
