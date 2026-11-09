@@ -159,7 +159,9 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
     let thoughts = ["Analyzing request..."];
 
     const saveThought = async (text) => {
-      thoughts.push(text);
+      // Remove newlines to prevent Safari syntax errors
+      const safeText = text.replace(/\n/g, ' ').substring(0, 150);
+      thoughts.push(safeText);
       await this.ctx.storage.put("live_thoughts", thoughts);
     };
 
@@ -171,7 +173,7 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
       await saveThought(`Step ${steps}: Using ${toolCall.tool}...`);
       
       const result = await this.runTool(toolCall);
-      await saveThought(`Result: ${result.slice(0, 100)}...`);
+      await saveThought(`Result: ${result.substring(0, 100)}...`);
       
       if (result.includes("GITHUB_TOKEN is not set")) {
         return "Please tap the ⚙ gear icon and add your GitHub token.";
@@ -189,6 +191,7 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
 
     if (thoughts.length > 0) {
       const newHistory = (await this.ctx.storage.get("history")) || [];
+      // Save thoughts using '|' as a separator instead of newline
       newHistory.push({ role: "system", content: "Thoughts:" + thoughts.join("|"), ts: Date.now() });
       await this.ctx.storage.put("history", newHistory.slice(-100));
     }
