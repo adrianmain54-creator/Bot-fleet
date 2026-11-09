@@ -19,7 +19,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. You MUST use your tools to build things. Never write entire codebases in the chat. If asked to build an app, use github_create_repo and github_push_file. If a tool fails because a token is missing, tell the user to click the gear icon and add the GITHUB_TOKEN." }
+          { name: "chief", instructions: "You are the Chief. You are a helpful, conversational AI. If the user says hello or asks a question, just reply normally. ONLY use your tools if the user asks you to build something, search the web, or write code. Do not build things unprompted." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -52,7 +52,6 @@ export class BotDurableObject {
       return Response.json({ ok: true });
     }
 
-    // --- SETTINGS STORAGE ---
     if (path === "/set_github_token") {
       const { token } = await request.json();
       await this.ctx.storage.put("github_token", token);
@@ -62,7 +61,6 @@ export class BotDurableObject {
       const token = await this.ctx.storage.get("github_token");
       return Response.json({ token: token || null });
     }
-    // ------------------------
 
     if (path === "/add_job") {
       const job = await request.json();
@@ -158,6 +156,12 @@ export class BotDurableObject {
     const memory = (await this.ctx.storage.get("memory")) || [];
     const system = `You are "${this.name}", an autonomous AI worker.
 Instructions: ${this.instructions}
+
+CRITICAL RULES:
+1. If the user just says hello or asks a normal question, reply normally in plain text. DO NOT use tools.
+2. ONLY use tools if the user explicitly asks you to build something, search, or execute code.
+3. DO NOT write massive blocks of code in the chat. Use github_create_repo and github_push_file to actually build things.
+
 You have these tools (you MUST reply with ONLY raw JSON to use a tool):
 - {"tool":"search","query":"..."}
 - {"tool":"fetch","url":"..."}
@@ -168,8 +172,6 @@ You have these tools (you MUST reply with ONLY raw JSON to use a tool):
 - {"tool":"remember","note":"..."}
 - {"tool":"schedule","when":"...","task":"..."}
 
-CRITICAL RULE: DO NOT write massive blocks of code in the chat. You are a bot with tools. Use github_create_repo and github_push_file to actually build things.
-If a tool fails because of a missing token, stop looping and tell the user to add the GITHUB_TOKEN in the settings.
 Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
     const messages = [
@@ -207,8 +209,13 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
       }
     }
 
+    // If it hit the step limit but was successfully doing things
+    if (steps >= maxSteps) {
+       return "I hit my limit of " + maxSteps + " steps, but I completed the work! You can check your GitHub to see the results.";
+    }
+
     if (raw.trim().startsWith('{"tool"')) {
-       return "I got stuck trying to use a tool. Please check the settings or try again.";
+       return "I got stuck trying to use a tool. Please try again.";
     }
 
     return raw;
