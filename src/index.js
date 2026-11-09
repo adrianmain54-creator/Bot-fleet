@@ -66,9 +66,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V8">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V9">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V8</title>
+<title>Grok Fleet V9</title>
 <style>
   :root {
     color-scheme: dark;
@@ -85,30 +85,17 @@ const HTML = `<!doctype html>
     --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font-sys); overflow: hidden; }
-  body { display: flex; flex-direction: column; height: 100dvh; }i
-  header {
-    display: flex; align-items: center; gap: 12px;
-    padding: calc(env(safe-area-inset-top) + 12px) 20px 12px;
-    background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border-bottom: 1px solid var(--border);
-    position: sticky; top: 0; z-index: 10;
-  }
-  .logo { font: 700 20px var(--font-mono); letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
-  .logo span { font: 500 11px var(--font-sys); color: var(--text-dim); background: var(--surface); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); text-transform: uppercase; letter-spacing: 0.5px; }
+  html, body { margin: 0; height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font-sys); overflow: hidden; }
+  
+  /* BUTTONS */
   .btn-icon {
     background: var(--surface); border: 1px solid var(--border); color: var(--text);
     border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: all 0.2s;
+    cursor: pointer; transition: all 0.2s; font-size: 16px;
   }
   .btn-icon:active { background: var(--surface-hover); transform: scale(0.95); }
-  #main { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
-  .tabs { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; }
-  .tabs button {
-    flex: 1; background: transparent; border: none; color: var(--text-dim); padding: 10px;
-    border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.2s;
-  }
-  .tabs button.active { background: var(--accent-bg); color: var(--text); box-shadow: 0 2px 10px rgba(0,0,0,0.5); }
+  
+  /* BOT CARDS */
   .bot-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
     padding: 16px 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
@@ -121,17 +108,16 @@ const HTML = `<!doctype html>
   .btn-open { background: var(--text); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; }
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
   
-  #chat { display: none; flex-direction: column; height: 100%; background: var(--bg); position: relative; }
-  #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; }
+  /* CHAT */
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
   .msg { max-width: 85%; font-size: 16px; line-height: 1.5; animation: slideUp 0.3s ease-out; }
   .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; white-space: pre-wrap; }
   .msg.bot { align-self: flex-start; padding: 4px 0; white-space: pre-wrap; }
   
-  /* THE THOUGHTS DROPDOWN */
+  /* THOUGHTS DROPDOWN */
   .thoughts {
     align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; margin-bottom: 4px; font-size: 13px; animation: fadeIn 0.3s;
+    border-radius: 12px; margin-bottom: 4px; font-size: 13px;
   }
   .thoughts summary {
     padding: 10px 14px; cursor: pointer; color: var(--text-dim); font-weight: 500; list-style: none;
@@ -143,11 +129,7 @@ const HTML = `<!doctype html>
   .thoughts .content { padding: 0 14px 14px; font-family: var(--font-mono); color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
   .thoughts .content div { margin-bottom: 6px; }
   
-  #chat-bar { 
-    padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); 
-    background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
-    border-top: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-end;
-  }
+  /* CHAT INPUT */
   #chat-input {
     flex: 1; background: var(--surface); color: var(--text); border: 1px solid var(--border);
     border-radius: 24px; padding: 12px 18px; font: inherit; font-size: 16px; resize: none; max-height: 120px;
@@ -161,13 +143,14 @@ const HTML = `<!doctype html>
   #chat-send:active { transform: scale(0.9); }
   #chat-send:disabled { opacity: 0.3; }
   
+  /* MODALS */
   .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100;
     align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(10px);
   }
   .modal-box {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
-    padding: 24px; width: 100%; max-width: 400px; animation: slideUp 0.2s ease-out;
+    padding: 24px; width: 100%; max-width: 400px;
   }
   .modal-box h2 { margin: 0 0 8px 0; font-size: 20px; }
   .modal-box p { margin: 0 0 16px 0; font-size: 14px; color: var(--text-dim); }
@@ -184,31 +167,36 @@ const HTML = `<!doctype html>
   .btn-save { background: var(--text); color: var(--bg); }
   .btn-danger { background: #ff453a22; color: #ff453a; border: 1px solid #ff453a55; width: 100%; margin-top: 10px; }
   @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes spin { 100% { transform: rotate(360deg); } }
 </style>
 </head>
-<body>
-<header id="main-header">
-  <div class="logo">Grok<span>Fleet V8</span></div>
-  <div style="display:flex; gap:8px; margin-left:auto;">
+<body style="display: flex; flex-direction: column;">
+
+<header id="main-header" style="display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top) + 12px) 20px 12px; background: rgba(0, 0, 0, 0.8); border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 10;">
+  <div style="display: flex; align-items: center; gap: 8px;">
+    <div style="font: 700 20px var(--font-mono); letter-spacing: -0.5px;">Grok</div>
+    <div style="font: 500 11px var(--font-sys); color: #888; background: #0a0a0a; padding: 2px 6px; border-radius: 6px; border: 1px solid #222; text-transform: uppercase; letter-spacing: 0.5px;">Fleet V9</div>
+  </div>
+  <div style="display: flex; gap: 8px;">
     <button class="btn-icon" id="btn-settings">⚙</button>
     <button class="btn-icon" id="btn-new-bot">+</button>
   </div>
 </header>
-<div id="main">
-  <div class="tabs">
-    <button id="tab-bots" class="active">Agents</button>
+
+<div id="main" style="flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column;">
+  <div class="tabs" style="display: flex; background: #0a0a0a; border: 1px solid #222; border-radius: 12px; padding: 4px; margin-bottom: 24px;">
+    <button id="tab-bots" class="active" style="flex: 1; background: #1a1a1a; border: none; color: #fff; padding: 10px; border-radius: 8px; font-weight: 600; font-size: 14px;">Agents</button>
   </div>
   <div id="list"></div>
 </div>
-<div id="chat">
-  <header>
-    <button class="btn-icon" id="btn-back" style="margin-left:0; border:none; background:none;">←</button>
-    <div class="logo" id="chat-title" style="font-size:18px;"></div>
-    <div style="margin-left:auto; width:36px;"></div>
+
+<div id="chat" style="display: none; flex-direction: column; height: 100%; position: relative;">
+  <header style="display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top) + 12px) 20px 12px; border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; z-index: 10;">
+    <button class="btn-icon" id="btn-back" style="border: none; background: none; font-size: 20px;">←</button>
+    <div style="font: 700 18px var(--font-mono);" id="chat-title"></div>
+    <div style="width: 36px;"></div>
   </header>
   <div id="chat-log"></div>
-  <div id="chat-bar">
+  <div id="chat-bar" style="display: flex; gap: 12px; align-items: flex-end; padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); background: rgba(0, 0, 0, 0.8); border-top: 1px solid #222;">
     <textarea id="chat-input" rows="1" placeholder="Message..."></textarea>
     <button id="chat-send">↑</button>
   </div>
@@ -260,7 +248,7 @@ function loadBots() {
     }
     
     if (bots.length === 0) {
-      $('#list').innerHTML = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
+      $('#list').innerHTML = '<p style="color:#888;text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
       return;
     }
 
@@ -307,7 +295,6 @@ function loadLog() {
       var m = data.messages[i];
       
       if (m.role === 'system' && m.content.startsWith('Thoughts:')) {
-        // RENDER PAST THOUGHTS AS A CLOSED DROPDOWN
         var lines = m.content.split('\n').slice(1);
         html += '<details class="thoughts">';
         html += '<summary>Processed steps</summary>';
@@ -317,14 +304,13 @@ function loadLog() {
         }
         html += '</div></details>';
       } else if (m.role === 'system') {
-        html += '<div class="msg system" style="text-align:center;font-size:12px;color:var(--text-dim);margin:10px 0">' + esc(m.content) + '</div>';
+        html += '<div class="msg system" style="text-align:center;font-size:12px;color:#888;margin:10px 0">' + esc(m.content) + '</div>';
       } else {
         var cls = m.role === 'assistant' ? 'bot' : m.role;
         html += '<div class="msg ' + cls + '">' + esc(m.content) + '</div>';
       }
     }
     
-    // RENDER LIVE THOUGHTS IF WORKING
     if (data.status === 'working') {
       if (data.live_thoughts && data.live_thoughts.length > 0) {
         html += '<details class="thoughts" open>';
@@ -335,7 +321,7 @@ function loadLog() {
         }
         html += '</div></details>';
       } else {
-        html += '<div class="msg bot" style="color:var(--text-dim)">Thinking...</div>';
+        html += '<div class="msg bot" style="color:#888">Thinking...</div>';
       }
     }
     
