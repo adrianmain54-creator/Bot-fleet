@@ -19,7 +19,7 @@ export class BotDurableObject {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
         const defaults = [
-          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. You MUST use your tools to build things. Never write entire codebases in the chat. If asked to build an app, use github_create_repo and github_push_file. If a tool fails because a token is missing, tell the user immediately to add the GITHUB_TOKEN in Cloudflare." }
+          { name: "chief", instructions: "You are the Chief, a relentless autonomous developer. You MUST use your tools to build things. Never write entire codebases in the chat. If asked to build an app, use github_create_repo and github_push_file. If a tool fails because a token is missing, tell the user to click the gear icon and add the GITHUB_TOKEN." }
         ];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
@@ -51,6 +51,18 @@ export class BotDurableObject {
       }
       return Response.json({ ok: true });
     }
+
+    // --- SETTINGS STORAGE ---
+    if (path === "/set_github_token") {
+      const { token } = await request.json();
+      await this.ctx.storage.put("github_token", token);
+      return Response.json({ ok: true });
+    }
+    if (path === "/get_github_token") {
+      const token = await this.ctx.storage.get("github_token");
+      return Response.json({ token: token || null });
+    }
+    // ------------------------
 
     if (path === "/add_job") {
       const job = await request.json();
@@ -157,7 +169,7 @@ You have these tools (you MUST reply with ONLY raw JSON to use a tool):
 - {"tool":"schedule","when":"...","task":"..."}
 
 CRITICAL RULE: DO NOT write massive blocks of code in the chat. You are a bot with tools. Use github_create_repo and github_push_file to actually build things.
-If a tool fails because of a missing token, stop looping and tell the user to add the GITHUB_TOKEN.
+If a tool fails because of a missing token, stop looping and tell the user to add the GITHUB_TOKEN in the settings.
 Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
     const messages = [
@@ -181,9 +193,8 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
       
       send({ type: "status", text: `Result: ${result.slice(0, 150)}...` });
       
-      // If we hit a fatal auth error, break the loop immediately
       if (result.includes("GITHUB_TOKEN is not set")) {
-        return "I need permission to access your GitHub. Please add `GITHUB_TOKEN` to your Cloudflare Variables and try again.";
+        return "I need permission to access your GitHub. Please tap the ⚙ gear icon in the top right and paste your GitHub token.";
       }
 
       messages.push({ role: "assistant", content: raw });
@@ -197,7 +208,7 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
     }
 
     if (raw.trim().startsWith('{"tool"')) {
-       return "I got stuck trying to use a tool. Please check the variables in Cloudflare.";
+       return "I got stuck trying to use a tool. Please check the settings or try again.";
     }
 
     return raw;
@@ -219,6 +230,14 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
       if (obj && obj.tool) return obj;
     } catch (e) {}
     return null;
+  }
+
+  async getGithubToken() {
+    if (this.env.GITHUB_TOKEN) return this.env.GITHUB_TOKEN;
+    const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
+    const res = await reg.fetch(new Request("https://registry/get_github_token"));
+    const data = await res.json();
+    return data.token;
   }
 
   async runTool({ tool, ...args }) {
@@ -243,7 +262,6 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
 
     if (tool === "execute_code") {
       try {
-        // Swapped to a new free API since Piston is whitelisted
         const res = await fetch("https://wandbox.org/api/compile.json", {
           method: "POST",
           headers: { "content-type": "application/json" },
@@ -260,12 +278,13 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
     }
 
     if (tool === "github_create_repo") {
-      if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set in Cloudflare environment variables.";
+      const token = await this.getGithubToken();
+      if (!token) return "Error: GITHUB_TOKEN is not set.";
       try {
         const res = await fetch("https://api.github.com/user/repos", {
           method: "POST",
           headers: {
-            "authorization": "Bearer " + this.env.GITHUB_TOKEN,
+            "authorization": "Bearer " + token,
             "user-agent": "BotFleet",
             "content-type": "application/json",
             "accept": "application/vnd.github.v3+json"
@@ -286,16 +305,17 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
     }
 
     if (tool === "github_push_file") {
-      if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set.";
+      const token = await this.getGithubToken();
+      if (!token) return "Error: GITHUB_TOKEN is not set.";
       try {
         const userRes = await fetch("https://api.github.com/user", {
-          headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
+          headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" }
         });
         const user = await userRes.json();
         
         let sha = null;
         const checkRes = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
-          headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
+          headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" }
         });
         if (checkRes.ok) {
           const fileData = await checkRes.json();
@@ -311,7 +331,7 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
         const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
           method: "PUT",
           headers: {
-            "authorization": "Bearer " + this.env.GITHUB_TOKEN,
+            "authorization": "Bearer " + token,
             "user-agent": "BotFleet",
             "content-type": "application/json",
             "accept": "application/vnd.github.v3+json"
@@ -327,15 +347,16 @@ Do NOT wrap your JSON in markdown block quotes. Just output raw JSON.`;
     }
 
     if (tool === "github_read_file") {
-      if (!this.env.GITHUB_TOKEN) return "Error: GITHUB_TOKEN is not set.";
+      const token = await this.getGithubToken();
+      if (!token) return "Error: GITHUB_TOKEN is not set.";
       try {
         const userRes = await fetch("https://api.github.com/user", {
-          headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
+          headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" }
         });
         const user = await userRes.json();
 
         const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
-          headers: { "authorization": "Bearer " + this.env.GITHUB_TOKEN, "user-agent": "BotFleet" }
+          headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" }
         });
         if (!res.ok) return "GitHub error: " + (await res.text());
         const data = await res.json();
