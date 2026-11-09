@@ -11,22 +11,16 @@ export class BotDurableObject {
     const path = url.pathname;
 
     if (path === "/list") {
-      const reg = (await this.ctx.storage.get("registry")) || [];
-      return Response.json(reg);
+      return Response.json((await this.ctx.storage.get("registry")) || []);
     }
 
     if (path === "/ensure_defaults") {
       const reg = (await this.ctx.storage.get("registry")) || [];
       if (reg.length === 0) {
-        const defaults = [
-          { name: "chief", instructions: "You are the Chief, an autonomous developer. ONLY use tools when asked to build or search. If you crash, use github_list_files to see what you made." }
-        ];
+        const defaults = [{ name: "chief", instructions: "You are the Chief. ONLY use tools if the user asks you to build something. Do not build unprompted." }];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
-          await stub.fetch(new Request("https://bot/init", {
-            method: "POST",
-            body: JSON.stringify(bot)
-          }));
+          await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify(bot) }));
         }
         await this.ctx.storage.put("registry", defaults);
         return Response.json(defaults);
@@ -37,8 +31,7 @@ export class BotDurableObject {
     if (path === "/unregister") {
       const { name } = await request.json();
       let reg = (await this.ctx.storage.get("registry")) || [];
-      reg = reg.filter(b => b.name !== name);
-      await this.ctx.storage.put("registry", reg);
+      await this.ctx.storage.put("registry", reg.filter(b => b.name !== name));
       return Response.json({ ok: true });
     }
 
@@ -58,8 +51,7 @@ export class BotDurableObject {
       return Response.json({ ok: true });
     }
     if (path === "/get_github_token") {
-      const token = await this.ctx.storage.get("github_token");
-      return Response.json({ token: token || null });
+      return Response.json({ token: (await this.ctx.storage.get("github_token")) || null });
     }
 
     if (path === "/init") {
@@ -90,14 +82,12 @@ export class BotDurableObject {
     if (path === "/message" && request.method === "POST") {
       const { message } = await request.json();
       
-      // 1. Save the user's message immediately
       const history = (await this.ctx.storage.get("history")) || [];
       history.push({ role: "user", content: message, ts: Date.now() });
       await this.ctx.storage.put("history", history.slice(-100));
       
-      // 2. Set status to working and trigger the alarm
       await this.ctx.storage.put("status", "working");
-      await this.ctx.storage.setAlarm(Date.now() + 100);
+      await this.ctx.storage.setAlarm(Date.now() + 100); // Trigger background task
       
       return Response.json({ ok: true, status: "working" });
     }
@@ -105,43 +95,34 @@ export class BotDurableObject {
     return new Response("not found", { status: 404 });
   }
 
-  // THIS RUNS IN THE BACKGROUND
   async alarm() {
     const status = await this.ctx.storage.get("status");
     if (status !== "working") return;
 
     try {
       const history = (await this.ctx.storage.get("history")) || [];
-      const lastUserMsg = history.filter(m => m.role === "user").pop();
-      if (!lastUserMsg) throw new Error("No user message found");
-
-      // Run the loop (passing null for the stream so it doesn't try to stream)
-      const reply = await this.runAgent(lastUserMsg.content, history);
+      const reply = await this.runAgent(history);
       
-      // Save the final result to the history
       const newHistory = (await this.ctx.storage.get("history")) || [];
       newHistory.push({ role: "assistant", content: reply, ts: Date.now() });
       await this.ctx.storage.put("history", newHistory.slice(-100));
-      
     } catch (e) {
       const newHistory = (await this.ctx.storage.get("history")) || [];
       newHistory.push({ role: "assistant", content: "Background task failed: " + e.message, ts: Date.now() });
       await this.ctx.storage.put("history", newHistory.slice(-100));
     } finally {
-      // Always set status back to idle when done
       await this.ctx.storage.put("status", "idle");
     }
   }
 
-  async runAgent(userMessage, history) {
+  async runAgent(history) {
     const memory = (await this.ctx.storage.get("memory")) || [];
     const system = `You are "${this.name}".
 Instructions: ${this.instructions}
 
 CRITICAL RULES:
-1. If the user just says hello, reply normally in plain text. DO NOT use tools.
-2. ONLY use tools if asked to build, search, or execute.
-3. When finished, output a final plain-text summary.
+1. ONLY use tools if asked to build, search, or execute.
+2. When finished, output a final plain-text summary.
 
 Tools (reply with ONLY raw JSON to use):
 - {"tool":"search","query":"..."}
@@ -155,15 +136,14 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
 
     const messages = [
       { role: "system", content: system },
-      ...history.slice(-10).map(m => ({ role: m.role, content: m.content })),
-      { role: "user", content: userMessage },
+      ...history.slice(-10)
     ];
 
     let raw = await this.askBrain(messages);
     let steps = 0;
     let thoughts = [];
 
-    while (true) {
+    while (steps < 15) { // Safety limit to prevent infinite loops
       const toolCall = this.parseTool(raw);
       if (!toolCall) break; 
       
@@ -171,8 +151,7 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
       thoughts.push(`Step ${steps}: Using ${toolCall.tool}...`);
       
       const result = await this.runTool(toolCall);
-      
-      thoughts.push(`Result: ${result.slice(0, 150)}...`);
+      thoughts.push(`Result: ${result.slice(0, 100)}...`);
       
       if (result.includes("GITHUB_TOKEN is not set")) {
         return "Please tap the ⚙ gear icon and add your GitHub token.";
@@ -189,7 +168,6 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
     }
 
     if (thoughts.length > 0) {
-      // Save thoughts so the UI can show what happened in the background
       const newHistory = (await this.ctx.storage.get("history")) || [];
       newHistory.push({ role: "system", content: "Thoughts:\n" + thoughts.join("\n"), ts: Date.now() });
       await this.ctx.storage.put("history", newHistory.slice(-100));
@@ -224,25 +202,18 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
     if (this.env.GITHUB_TOKEN) return this.env.GITHUB_TOKEN;
     const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
     const res = await reg.fetch(new Request("https://registry/get_github_token"));
-    const data = await res.json();
-    return data.token;
+    return (await res.json()).token;
   }
 
   async runTool({ tool, ...args }) {
-    // (Same tools as before, no changes needed to the actual execution logic)
     if (tool === "search") {
       try {
-        const q = encodeURIComponent(args.query || "");
-        const res = await fetch(`https://html.duckduckgo.com/html/?q=${q}`, {
-          headers: { "user-agent": "Mozilla/5.0" },
-        });
+        const res = await fetch(`https://html.duckduckgo.com/html/?q=${encodeURIComponent(args.query || "")}`, { headers: { "user-agent": "Mozilla/5.0" } });
         const html = await res.text();
         const results = [];
         const re = /<a rel="nofollow" class="result__a" href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/g;
         let m;
-        while ((m = re.exec(html)) && results.length < 5) {
-          results.push(`- ${m[2].replace(/<[^>]+>/g, "").trim()} (${m[1]})`);
-        }
+        while ((m = re.exec(html)) && results.length < 5) results.push(`- ${m[2].replace(/<[^>]+>/g, "").trim()} (${m[1]})`);
         return results.length ? results.join("\n") : "no results";
       } catch (e) { return "search failed: " + e.message; }
     }
@@ -259,70 +230,61 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
       } catch (e) { return "Execution failed: " + e.message; }
     }
 
-    if (tool === "github_create_repo") {
+    if (tool === "github_create_repo" || tool === "github_push_file" || tool === "github_read_file" || tool === "github_list_files") {
       const token = await this.getGithubToken();
       if (!token) return "Error: GITHUB_TOKEN is not set.";
-      try {
-        const res = await fetch("https://api.github.com/user/repos", {
-          method: "POST",
-          headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet", "content-type": "application/json", "accept": "application/vnd.github.v3+json" },
-          body: JSON.stringify({ name: args.name, description: args.description || "", private: false, auto_init: true })
-        });
-        if (!res.ok) return "GitHub error: " + (await res.text());
-        const data = await res.json();
-        return `Repo created successfully: ${data.html_url}`;
-      } catch (e) { return "Failed: " + e.message; }
-    }
+      
+      const userRes = await fetch("https://api.github.com/user", { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
+      const user = await userRes.json();
+      if (!user.login) return "Error: Invalid GitHub token.";
 
-    if (tool === "github_push_file") {
-      const token = await this.getGithubToken();
-      if (!token) return "Error: GITHUB_TOKEN is not set.";
-      try {
-        const userRes = await fetch("https://api.github.com/user", { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-        const user = await userRes.json();
-        
-        let sha = null;
-        const checkRes = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-        if (checkRes.ok) { sha = (await checkRes.json()).sha; }
+      if (tool === "github_create_repo") {
+        try {
+          const res = await fetch("https://api.github.com/user/repos", {
+            method: "POST",
+            headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet", "content-type": "application/json", "accept": "application/vnd.github.v3+json" },
+            body: JSON.stringify({ name: args.name, description: args.description || "", private: false, auto_init: true })
+          });
+          if (!res.ok) return "GitHub error: " + (await res.text());
+          return `Repo created successfully: ${(await res.json()).html_url}`;
+        } catch (e) { return "Failed: " + e.message; }
+      }
 
-        const body = { message: args.message || "Update", content: btoa(unescape(encodeURIComponent(args.content))) };
-        if (sha) body.sha = sha;
+      if (tool === "github_push_file") {
+        try {
+          let sha = null;
+          const checkRes = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
+          if (checkRes.ok) sha = (await checkRes.json()).sha;
 
-        const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
-          method: "PUT",
-          headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet", "content-type": "application/json", "accept": "application/vnd.github.v3+json" },
-          body: JSON.stringify(body)
-        });
-        if (!res.ok) return "GitHub error: " + (await res.text());
-        return `File ${args.path} pushed successfully.`;
-      } catch (e) { return "Failed: " + e.message; }
-    }
+          const body = { message: args.message || "Update", content: btoa(unescape(encodeURIComponent(args.content))) };
+          if (sha) body.sha = sha;
 
-    if (tool === "github_read_file") {
-      const token = await this.getGithubToken();
-      if (!token) return "Error: GITHUB_TOKEN is not set.";
-      try {
-        const userRes = await fetch("https://api.github.com/user", { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-        const user = await userRes.json();
-        const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-        if (!res.ok) return "GitHub error: " + (await res.text());
-        const data = await res.json();
-        return `File contents of ${args.path}:\n\n${decodeURIComponent(escape(atob(data.content)))}`;
-      } catch (e) { return "Failed: " + e.message; }
-    }
+          const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, {
+            method: "PUT",
+            headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet", "content-type": "application/json", "accept": "application/vnd.github.v3+json" },
+            body: JSON.stringify(body)
+          });
+          if (!res.ok) return "GitHub error: " + (await res.text());
+          return `File ${args.path} pushed successfully.`;
+        } catch (e) { return "Failed: " + e.message; }
+      }
 
-    if (tool === "github_list_files") {
-      const token = await this.getGithubToken();
-      if (!token) return "Error: GITHUB_TOKEN is not set.";
-      try {
-        const userRes = await fetch("https://api.github.com/user", { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-        const user = await userRes.json();
-        const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/git/trees/main?recursive=1`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-        if (!res.ok) return "GitHub error: " + (await res.text());
-        const data = await res.json();
-        const files = data.tree.filter(item => item.type === "blob").map(item => item.path);
-        return `Files in ${args.repo}:\n` + files.join("\n");
-      } catch (e) { return "Failed: " + e.message; }
+      if (tool === "github_read_file") {
+        try {
+          const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
+          if (!res.ok) return "GitHub error: " + (await res.text());
+          return `File contents:\n\n${decodeURIComponent(escape(atob((await res.json()).content)))}`;
+        } catch (e) { return "Failed: " + e.message; }
+      }
+
+      if (tool === "github_list_files") {
+        try {
+          const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/git/trees/main?recursive=1`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
+          if (!res.ok) return "GitHub error: " + (await res.text());
+          const files = (await res.json()).tree.filter(item => item.type === "blob").map(item => item.path);
+          return `Files in ${args.repo}:\n` + files.join("\n");
+        } catch (e) { return "Failed: " + e.message; }
+      }
     }
 
     return "Tool executed (or unknown tool).";
