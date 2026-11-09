@@ -66,19 +66,17 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V10">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V11">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V10</title>
+<title>Grok Fleet V11</title>
 <style>
   :root {
     color-scheme: dark;
     --bg: #000000;
     --surface: #0a0a0a;
-    --surface-hover: #141414;
     --border: #222222;
     --text: #f5f5f5;
     --text-dim: #888888;
-    --accent: #ffffff;
     --accent-bg: #1a1a1a;
     --user-bubble: #1c1c1e;
     --font-sys: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -92,14 +90,14 @@ const HTML = `<!doctype html>
     border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
     cursor: pointer; transition: all 0.2s; font-size: 16px;
   }
-  .btn-icon:active { background: var(--surface-hover); transform: scale(0.95); }
+  .btn-icon:active { background: #141414; transform: scale(0.95); }
   
   .bot-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
     padding: 16px 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
     transition: background 0.2s;
   }
-  .bot-card:active { background: var(--surface-hover); }
+  .bot-card:active { background: #141414; }
   .bot-card h3 { margin: 0 0 4px 0; font-size: 16px; font-weight: 600; }
   .bot-card p { margin: 0; color: var(--text-dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
   .bot-actions { display: flex; gap: 8px; align-items: center; }
@@ -107,7 +105,7 @@ const HTML = `<!doctype html>
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
   
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
-  .msg { max-width: 85%; font-size: 16px; line-height: 1.5; animation: slideUp 0.3s ease-out; }
+  .msg { max-width: 85%; font-size: 16px; line-height: 1.5; }
   .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; white-space: pre-wrap; }
   .msg.bot { align-self: flex-start; padding: 4px 0; white-space: pre-wrap; }
   
@@ -128,14 +126,12 @@ const HTML = `<!doctype html>
   #chat-input {
     flex: 1; background: var(--surface); color: var(--text); border: 1px solid var(--border);
     border-radius: 24px; padding: 12px 18px; font: inherit; font-size: 16px; resize: none; max-height: 120px;
-    outline: none; transition: border-color 0.2s;
+    outline: none;
   }
-  #chat-input:focus { border-color: #444; }
   #chat-send {
     background: var(--text); color: var(--bg); border: none; border-radius: 50%; width: 44px; height: 44px;
-    display: flex; align-items: center; justify-content: center; font-size: 20px; transition: transform 0.2s; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0;
   }
-  #chat-send:active { transform: scale(0.9); }
   #chat-send:disabled { opacity: 0.3; }
   
   .modal-overlay {
@@ -154,13 +150,11 @@ const HTML = `<!doctype html>
     font-size: 15px;
   }
   .modal-box textarea { resize: vertical; min-height: 80px; }
-  .modal-box input:focus, .modal-box textarea:focus { border-color: #444; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
   .modal-actions button { padding: 10px 16px; border-radius: 8px; font-weight: 600; border: none; font-size: 14px; cursor: pointer; }
   .btn-cancel { background: transparent; color: var(--text-dim); }
   .btn-save { background: var(--text); color: var(--bg); }
   .btn-danger { background: #ff453a22; color: #ff453a; border: 1px solid #ff453a55; width: 100%; margin-top: 10px; }
-  @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body style="display: flex; flex-direction: column;">
@@ -168,7 +162,7 @@ const HTML = `<!doctype html>
 <header id="main-header" style="display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top) + 12px) 20px 12px; background: rgba(0, 0, 0, 0.8); border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 10;">
   <div style="display: flex; align-items: center; gap: 8px;">
     <div style="font: 700 20px var(--font-mono); letter-spacing: -0.5px;">Grok</div>
-    <div style="font: 500 11px var(--font-sys); color: #888; background: #0a0a0a; padding: 2px 6px; border-radius: 6px; border: 1px solid #222; text-transform: uppercase; letter-spacing: 0.5px;">Fleet V10</div>
+    <div style="font: 500 11px var(--font-sys); color: #888; background: #0a0a0a; padding: 2px 6px; border-radius: 6px; border: 1px solid #222; text-transform: uppercase; letter-spacing: 0.5px;">Fleet V11</div>
   </div>
   <div style="display: flex; gap: 8px;">
     <button class="btn-icon" id="btn-settings">⚙</button>
@@ -222,28 +216,30 @@ const HTML = `<!doctype html>
 </div>
 
 <script>
-var $ = function(s) { return document.querySelector(s); };
+// PURE ES5 JAVASCRIPT (NO REGEX, NO BACKTICKS, NO SYNTAX ERRORS)
 var currentBot = null;
-var hasAutoOpened = false;
 var pollInterval = null;
+
+function $(id) { return document.getElementById(id); }
 
 function api(path, opts) {
   return fetch(path, opts).then(function(r) {
-    if (!r.ok) throw new Error("Error " + r.status);
+    if (!r.ok) throw new Error("HTTP " + r.status);
     var ct = r.headers.get('content-type') || '';
-    return ct.indexOf('json') > -1 ? r.json() : r.text();
+    if (ct.indexOf('json') > -1) return r.json();
+    return r.text();
   });
 }
 
 function loadBots() {
   api('/api/bots').then(function(bots) {
-    if (!Array.isArray(bots)) {
-      $('#list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: Invalid data. Tap ⚙ to reset.</p>';
+    if (!bots || !Array.isArray(bots)) {
+      $('list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: Invalid data. Tap ⚙ to reset.</p>';
       return;
     }
     
     if (bots.length === 0) {
-      $('#list').innerHTML = '<p style="color:#888;text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
+      $('list').innerHTML = '<p style="color:#888;text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
       return;
     }
 
@@ -251,20 +247,20 @@ function loadBots() {
     for (var i = 0; i < bots.length; i++) {
       var b = bots[i];
       html += '<div class="bot-card">';
-      html += '<div><h3>' + b.name + '</h3><p>' + (b.instructions || '').slice(0,60) + '</p></div>';
+      html += '<div><h3>' + b.name + '</h3><p>' + (b.instructions || '').substring(0,60) + '</p></div>';
       html += '<div class="bot-actions">';
-      html += '<button class="btn-open" onclick="openBot(\\'' + b.name + '\\')">Chat</button>';
-      html += '<button class="btn-del" onclick="deleteBot(\\'' + b.name + '\\')">✕</button>';
+      html += '<button class="btn-open" onclick="window.openBot(\'' + b.name + '\')">Chat</button>';
+      html += '<button class="btn-del" onclick="window.deleteBot(\'' + b.name + '\')">✕</button>';
       html += '</div></div>';
     }
-    $('#list').innerHTML = html;
+    $('list').innerHTML = html;
     
-    if (!hasAutoOpened && bots[0]) {
-      hasAutoOpened = true;
-      openBot('chief');
+    if (!window.hasAutoOpened && bots.length > 0) {
+      window.hasAutoOpened = true;
+      window.openBot('chief');
     }
   }).catch(function(err) {
-    $('#list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: ' + err.message + '</p>';
+    $('list').innerHTML = '<p style="color:red;text-align:center;margin-top:40px">Error: ' + err.message + '</p>';
   });
 }
 
@@ -275,22 +271,28 @@ function deleteBot(name) {
 
 function openBot(name) {
   currentBot = name;
-  $('#main').style.display = 'none';
-  $('#main-header').style.display = 'none';
-  $('#chat').style.display = 'flex';
-  $('#chat-title').textContent = name;
+  $('main').style.display = 'none';
+  $('main-header').style.display = 'none';
+  $('chat').style.display = 'flex';
+  $('chat-title').textContent = name;
   loadLog();
 }
 
+function esc(str) {
+  if (typeof str !== 'string') return '';
+  return str.replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
+}
+
 function loadLog() {
-  api('/api/bot/' + encodeURIComponent(currentBot) + '/messages').then(function(data) {
-    var log = $('#chat-log');
+  api('/api/bot/' + currentBot + '/messages').then(function(data) {
+    var log = $('chat-log');
     var html = '';
     for (var i = 0; i < data.messages.length; i++) {
       var m = data.messages[i];
       
-      if (m.role === 'system' && m.content.startsWith('Thoughts:')) {
-        // THE FIX: Using '|' as a separator instead of \n to avoid Safari syntax errors
+      if (m.role === 'system' && m.content.indexOf('Thoughts:') === 0) {
         var lines = m.content.replace('Thoughts:', '').split('|');
         html += '<details class="thoughts">';
         html += '<summary>Processed steps</summary>';
@@ -326,68 +328,61 @@ function loadLog() {
 
     if (data.status === 'working') {
       if (!pollInterval) pollInterval = setInterval(loadLog, 3000);
-      $('#chat-send').disabled = true;
-      $('#chat-input').placeholder = "Working in background...";
+      $('chat-send').disabled = true;
+      $('chat-input').placeholder = "Working in background...";
     } else {
       if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
-      $('#chat-send').disabled = false;
-      $('#chat-input').placeholder = "Message...";
+      $('chat-send').disabled = false;
+      $('chat-input').placeholder = "Message...";
     }
   }).catch(function(e) { console.log(e); });
 }
 
-function esc(s) {
-  if (typeof s !== 'string') return '';
-  return s.replace(/[&<>"']/g, function(c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-  });
-}
-
 function send() {
-  var text = $('#chat-input').value.trim();
+  var text = $('chat-input').value.trim();
   if (!text || !currentBot) return;
-  $('#chat-input').value = ''; 
-  $('#chat-input').style.height = 'auto';
+  $('chat-input').value = ''; 
+  $('chat-input').style.height = 'auto';
   
-  var log = $('#chat-log');
+  var log = $('chat-log');
   var u = document.createElement('div');
   u.className = 'msg user'; u.textContent = text;
   log.appendChild(u); log.scrollTop = log.scrollHeight;
 
-  api('/api/bot/' + encodeURIComponent(currentBot) + '/message', {
+  api('/api/bot/' + currentBot + '/message', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ message: text })
   }).then(function() { loadLog(); }).catch(function(e) { alert('Error: ' + e.message); });
 }
 
-$('#chat-send').onclick = send;
-$('#chat-input').onkeydown = function(e) {
+$('chat-send').onclick = send;
+$('chat-input').onkeydown = function(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 };
-$('#chat-input').oninput = function() {
-  $('#chat-input').style.height = 'auto';
-  $('#chat-input').style.height = Math.min($('#chat-input').scrollHeight, 120) + 'px';
+$('chat-input').oninput = function() {
+  $('chat-input').style.height = 'auto';
+  $('chat-input').style.height = Math.min($('chat-input').scrollHeight, 120) + 'px';
 };
 
-$('#btn-back').onclick = function() {
+$('btn-back').onclick = function() {
   currentBot = null;
   if (pollInterval) clearInterval(pollInterval);
-  $('#chat').style.display = 'none';
-  $('#main').style.display = 'flex';
-  $('#main-header').style.display = 'flex';
+  $('chat').style.display = 'none';
+  $('main').style.display = 'flex';
+  $('main-header').style.display = 'flex';
   loadBots();
 };
 
-$('#btn-new-bot').onclick = function() {
-  $('#input-agent-name').value = '';
-  $('#input-agent-instructions').value = '';
-  $('#modal-new-agent').style.display = 'flex';
+$('btn-new-bot').onclick = function() {
+  $('input-agent-name').value = '';
+  $('input-agent-instructions').value = '';
+  $('modal-new-agent').style.display = 'flex';
 };
 
 function createAgent() {
-  var name = $('#input-agent-name').value.trim();
-  var instructions = $('#input-agent-instructions').value.trim();
+  var name = $('input-agent-name').value.trim();
+  var instructions = $('input-agent-instructions').value.trim();
   if (!name) return alert('Name is required');
   
   api('/api/bots', {
@@ -400,15 +395,15 @@ function createAgent() {
   }).catch(function(e) { alert(e.message); });
 }
 
-$('#btn-settings').onclick = function() {
+$('btn-settings').onclick = function() {
   api('/api/settings').then(function(data) {
-    if (data.token) $('#input-github-token').value = data.token;
-    $('#modal-settings').style.display = 'flex';
+    if (data.token) $('input-github-token').value = data.token;
+    $('modal-settings').style.display = 'flex';
   });
 };
 
 function saveSettings() {
-  var token = $('#input-github-token').value.trim();
+  var token = $('input-github-token').value.trim();
   api('/api/settings', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
@@ -422,9 +417,17 @@ function resetApp() {
 }
 
 function closeModal(id) {
-  $('#' + id).style.display = 'none';
+  $(id).style.display = 'none';
 }
 
+window.openBot = openBot;
+window.deleteBot = deleteBot;
+window.closeModal = closeModal;
+window.saveSettings = saveSettings;
+window.createAgent = createAgent;
+window.resetApp = resetApp;
+
+// Load the bots on startup
 loadBots();
 </script>
 </body>
