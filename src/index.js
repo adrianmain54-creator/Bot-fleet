@@ -15,24 +15,12 @@ export default {
       const { name, instructions } = await request.json();
       if (!name) return new Response("name required", { status: 400 });
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/register", {
-        method: "POST",
-        body: JSON.stringify({ name, instructions }),
-      }));
+      await reg.fetch(new Request("https://registry/register", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
-      await stub.fetch(new Request("https://bot/init", {
-        method: "POST",
-        body: JSON.stringify({ name, instructions }),
-      }));
+      await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       return Response.json({ ok: true });
     }
 
-    if (url.pathname === "/api/jobs" && request.method === "GET") {
-      const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      return reg.fetch(new Request("https://registry/list_jobs"));
-    }
-
-    // --- SETTINGS API ---
     if (url.pathname === "/api/settings" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/get_github_token"));
@@ -40,20 +28,13 @@ export default {
     if (url.pathname === "/api/settings" && request.method === "POST") {
       const body = await request.json();
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      return reg.fetch(new Request("https://registry/set_github_token", {
-        method: "POST",
-        body: JSON.stringify(body)
-      }));
+      return reg.fetch(new Request("https://registry/set_github_token", { method: "POST", body: JSON.stringify(body) }));
     }
-    // --------------------
 
     if (url.pathname.startsWith("/api/bot/") && url.pathname.endsWith("/delete") && request.method === "POST") {
       const name = decodeURIComponent(url.pathname.split('/')[3]);
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/unregister", {
-        method: "POST",
-        body: JSON.stringify({ name })
-      }));
+      await reg.fetch(new Request("https://registry/unregister", { method: "POST", body: JSON.stringify({ name }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
       await stub.fetch(new Request("https://bot/delete", { method: "POST" }));
       return Response.json({ ok: true });
@@ -69,9 +50,7 @@ export default {
       return stub.fetch(new Request(target, request));
     }
 
-    return new Response(HTML, {
-      headers: { "content-type": "text/html; charset=utf-8" },
-    });
+    return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8" } });
   },
 };
 
@@ -103,7 +82,6 @@ const HTML = `<!doctype html>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font-sys); overflow: hidden; }
   body { display: flex; flex-direction: column; height: 100dvh; }
-  
   header {
     display: flex; align-items: center; gap: 12px;
     padding: calc(env(safe-area-inset-top) + 12px) 20px 12px;
@@ -119,7 +97,6 @@ const HTML = `<!doctype html>
     cursor: pointer; transition: all 0.2s;
   }
   .btn-icon:active { background: var(--surface-hover); transform: scale(0.95); }
-  
   #main { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
   .tabs { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; }
   .tabs button {
@@ -138,32 +115,17 @@ const HTML = `<!doctype html>
   .bot-actions { display: flex; gap: 8px; align-items: center; }
   .btn-open { background: var(--text); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; }
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  
   #chat { display: none; flex-direction: column; height: 100%; background: var(--bg); position: relative; }
   #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; }
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
   .msg { max-width: 85%; font-size: 16px; line-height: 1.5; animation: slideUp 0.3s ease-out; }
   .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; }
   .msg.bot { align-self: flex-start; padding: 4px 0; white-space: pre-wrap; }
+  .msg.system { font-size: 13px; color: var(--text-dim); font-family: var(--font-mono); background: var(--surface); padding: 10px; border-radius: 8px; align-self: center; max-width: 100%; white-space: pre-wrap; }
   .msg code { background: var(--surface); padding: 2px 6px; border-radius: 6px; font-family: var(--font-mono); font-size: 0.9em; }
   .msg pre { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; overflow-x: auto; margin: 8px 0; }
   .msg pre code { background: none; padding: 0; }
   .msg strong { color: #fff; font-weight: 600; }
-  
-  .thoughts {
-    align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; margin-bottom: 4px; font-size: 13px; animation: fadeIn 0.3s;
-  }
-  .thoughts summary {
-    padding: 10px 14px; cursor: pointer; color: var(--text-dim); font-weight: 500; list-style: none;
-    display: flex; align-items: center; gap: 8px; outline: none;
-  }
-  .thoughts summary::-webkit-details-marker { display: none; }
-  .thoughts summary:before { content: "▶"; font-size: 10px; transition: transform 0.2s; }
-  .thoughts[open] summary:before { transform: rotate(90deg); }
-  .thoughts .content { padding: 0 14px 14px; font-family: var(--font-mono); color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
-  .thoughts .content div { margin-bottom: 6px; }
-
   #chat-bar { 
     padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); 
     background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -180,9 +142,7 @@ const HTML = `<!doctype html>
     display: flex; align-items: center; justify-content: center; font-size: 20px; transition: transform 0.2s; flex-shrink: 0;
   }
   #chat-send:active { transform: scale(0.9); }
-  .cursor:after { content: "▋"; color: var(--text-dim); animation: blink 1s steps(2) infinite; margin-left: 2px; }
-  
-  /* SETTINGS MODAL */
+  #chat-send:disabled { opacity: 0.3; }
   #modal-settings {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100;
     align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(10px);
@@ -202,30 +162,23 @@ const HTML = `<!doctype html>
   .modal-actions button { padding: 10px 16px; border-radius: 8px; font-weight: 600; border: none; font-size: 14px; }
   .btn-cancel { background: transparent; color: var(--text-dim); }
   .btn-save { background: var(--text); color: var(--bg); }
-
-  @keyframes blink { 50% { opacity: 0; } }
   @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>
 </head>
 <body>
-
 <header id="main-header">
   <div class="logo">Grok<span>Fleet</span></div>
   <div style="display:flex; gap:8px; margin-left:auto;">
-    <button class="btn-icon" id="btn-settings" title="Settings">⚙</button>
-    <button class="btn-icon" id="btn-new-bot" title="New Bot">+</button>
+    <button class="btn-icon" id="btn-settings">⚙</button>
+    <button class="btn-icon" id="btn-new-bot">+</button>
   </div>
 </header>
-
 <div id="main">
   <div class="tabs">
     <button id="tab-bots" class="active" onclick="switchTab('bots')">Agents</button>
-    <button id="tab-jobs" onclick="switchTab('jobs')">Jobs</button>
   </div>
   <div id="list"></div>
 </div>
-
 <div id="chat">
   <header>
     <button class="btn-icon" id="btn-back" style="margin-left:0; border:none; background:none;">←</button>
@@ -238,12 +191,10 @@ const HTML = `<!doctype html>
     <button id="chat-send">↑</button>
   </div>
 </div>
-
-<!-- SETTINGS MODAL -->
 <div id="modal-settings">
   <div class="modal-box">
     <h2>Settings</h2>
-    <p>Paste your GitHub Personal Access Token so the bots can create repos and push code.</p>
+    <p>Paste your GitHub Personal Access Token.</p>
     <input type="password" id="input-github-token" placeholder="ghp_..." autocomplete="off" spellcheck="false">
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
@@ -251,12 +202,12 @@ const HTML = `<!doctype html>
     </div>
   </div>
 </div>
-
 <script>
 const $ = s => document.querySelector(s);
 let currentBot = null;
 let currentTab = 'bots';
 let hasAutoOpened = false;
+let pollInterval = null;
 
 async function api(path, opts) {
   const r = await fetch(path, opts);
@@ -266,27 +217,21 @@ async function api(path, opts) {
 
 function switchTab(tab) {
   currentTab = tab;
-  $('#tab-bots').className = tab === 'bots' ? 'active' : '';
-  $('#tab-jobs').className = tab === 'jobs' ? 'active' : '';
-  if (tab === 'bots') loadBots(); else loadJobs();
+  if (tab === 'bots') loadBots();
 }
 
 async function loadBots() {
   const bots = await api('/api/bots');
   let html = '';
   if (bots.length) {
-    html = bots.map(function(b) {
-      return '<div class="bot-card">' +
-        '<div>' +
-          '<h3>' + b.name + '</h3>' +
-          '<p>' + (b.instructions || 'No instructions').slice(0,60) + '</p>' +
-        '</div>' +
-        '<div class="bot-actions">' +
-          '<button class="btn-open" onclick="openBot(\\'' + b.name + '\\')">Chat</button>' +
-          '<button class="btn-del" onclick="deleteBot(\\'' + b.name + '\\')">✕</button>' +
-        '</div>' +
-      '</div>';
-    }).join('');
+    html = bots.map(b => `
+      <div class="bot-card">
+        <div><h3>${b.name}</h3><p>${(b.instructions||'').slice(0,60)}</p></div>
+        <div class="bot-actions">
+          <button class="btn-open" onclick="openBot('${b.name}')">Chat</button>
+          <button class="btn-del" onclick="deleteBot('${b.name}')">✕</button>
+        </div>
+      </div>`).join('');
   } else {
     html = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
   }
@@ -304,22 +249,6 @@ async function deleteBot(name) {
   loadBots();
 }
 
-async function loadJobs() {
-  const jobs = await api('/api/jobs');
-  let html = '';
-  if (jobs.length) {
-    html = jobs.map(function(j) {
-      return '<div class="bot-card">' + 
-        '<div><h3>' + j.title + '</h3><p>' + (j.description || 'No description') + '</p></div>' +
-        '<div style="font-size:12px; color:var(--text-dim);">' + j.status + '</div>' +
-      '</div>';
-    }).join('');
-  } else {
-    html = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">Job board is empty.</p>';
-  }
-  $('#list').innerHTML = html;
-}
-
 async function openBot(name) {
   currentBot = name;
   $('#main').style.display = 'none';
@@ -330,23 +259,37 @@ async function openBot(name) {
 }
 
 async function loadLog() {
-  const msgs = await api('/api/bot/' + encodeURIComponent(currentBot) + '/messages');
+  const data = await api('/api/bot/' + encodeURIComponent(currentBot) + '/messages');
   const log = $('#chat-log');
-  log.innerHTML = msgs.map(function(m) {
+  log.innerHTML = data.messages.map(m => {
+    if (m.role === 'system') {
+      return '<div class="msg system">' + esc(m.content) + '</div>';
+    }
     return '<div class="msg ' + m.role + '">' + (m.role === 'assistant' ? md(m.content) : esc(m.content)) + '</div>';
   }).join('');
   log.scrollTop = log.scrollHeight;
+
+  if (data.status === 'working') {
+    if (!pollInterval) {
+      pollInterval = setInterval(loadLog, 3000);
+    }
+    $('#chat-send').disabled = true;
+  } else {
+    if (pollInterval) {
+      clearInterval(pollInterval);
+      pollInterval = null;
+    }
+    $('#chat-send').disabled = false;
+  }
 }
 
 function esc(s) {
-  return s.replace(/[&<>"']/g, function(c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
-  });
+  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 }
 
 function md(raw) {
   let s = esc(raw);
-  s = s.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, function(_, c) { return '<pre><code>' + c.replace(/^\\n/, '') + '</code></pre>'; });
+  s = s.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, (_, c) => '<pre><code>' + c.replace(/^\\n/, '') + '</code></pre>');
   s = s.replace(/\`([^\`\\n]+)\`/g, '<code>$1</code>');
   s = s.replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>');
   return s;
@@ -356,73 +299,23 @@ async function send() {
   const text = $('#chat-input').value.trim();
   if (!text || !currentBot) return;
   $('#chat-input').value = ''; $('#chat-input').style.height = 'auto';
-  const log = $('#chat-log');
   
+  const log = $('#chat-log');
   const u = document.createElement('div');
   u.className = 'msg user'; u.textContent = text;
   log.appendChild(u); log.scrollTop = log.scrollHeight;
 
-  const thoughtsEl = document.createElement('details');
-  thoughtsEl.className = 'thoughts';
-  thoughtsEl.style.display = 'block'; 
-  const summaryEl = document.createElement('summary');
-  summaryEl.textContent = 'Thinking...';
-  const contentEl = document.createElement('div');
-  contentEl.className = 'content';
-  thoughtsEl.appendChild(summaryEl);
-  thoughtsEl.appendChild(contentEl);
-  
-  log.appendChild(thoughtsEl); 
-
-  const botEl = document.createElement('div');
-  botEl.className = 'msg bot cursor';
-  log.appendChild(botEl); log.scrollTop = log.scrollHeight;
-
   try {
-    const res = await fetch('/api/bot/' + encodeURIComponent(currentBot) + '/message', {
+    await fetch('/api/bot/' + encodeURIComponent(currentBot) + '/message', {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ message: text }),
     });
-    if (!res.ok) throw new Error(await res.text());
-    const reader = res.body.getReader();
-    const dec = new TextDecoder();
-    let buf = '', acc = '';
     
-    while (true) {
-      const { value, done } = await reader.read();
-      if (done) break;
-      buf += dec.decode(value, { stream: true });
-      const lines = buf.split('\\n'); buf = lines.pop();
-      
-      for (const line of lines) {
-        if (!line.trim()) continue;
-        try {
-          const o = JSON.parse(line);
-          
-          if (o.type === 'status') {
-            const p = document.createElement('div');
-            p.textContent = o.text;
-            contentEl.appendChild(p);
-            summaryEl.textContent = 'Processed steps';
-          }
-          
-          if (o.type === 'delta') { 
-            acc += o.text; 
-            botEl.innerHTML = md(acc); 
-          }
-          if (o.type === 'error') { 
-            acc += '\\n\\n' + o.text; 
-            botEl.innerHTML = md(acc); 
-          }
-        } catch {}
-      }
-      log.scrollTop = log.scrollHeight;
-    }
-    botEl.classList.remove('cursor');
+    // Instantly load log to show the "working" state and start polling
+    loadLog();
   } catch (e) {
-    botEl.classList.remove('cursor');
-    botEl.textContent = 'Error: ' + e.message;
+    alert('Error: ' + e.message);
   }
 }
 
@@ -437,10 +330,11 @@ $('#chat-input').addEventListener('input', () => {
 
 $('#btn-back').onclick = () => {
   currentBot = null;
+  if (pollInterval) clearInterval(pollInterval);
   $('#chat').style.display = 'none';
   $('#main').style.display = 'flex';
   $('#main-header').style.display = 'flex';
-  if(currentTab === 'bots') loadBots(); else loadJobs();
+  loadBots();
 };
 
 $('#btn-new-bot').onclick = async () => {
@@ -455,18 +349,13 @@ $('#btn-new-bot').onclick = async () => {
   loadBots();
 };
 
-// SETTINGS LOGIC
 $('#btn-settings').onclick = async () => {
   const data = await api('/api/settings');
-  if (data.token) {
-    $('#input-github-token').value = data.token;
-  }
+  if (data.token) $('#input-github-token').value = data.token;
   $('#modal-settings').style.display = 'flex';
 };
 
-function closeSettings() {
-  $('#modal-settings').style.display = 'none';
-}
+function closeSettings() { $('#modal-settings').style.display = 'none'; }
 
 async function saveSettings() {
   const token = $('#input-github-token').value.trim();
@@ -476,7 +365,6 @@ async function saveSettings() {
     body: JSON.stringify({ token })
   });
   closeSettings();
-  alert('GitHub Token saved!');
 }
 
 window.openBot = openBot;
