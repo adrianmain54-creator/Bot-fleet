@@ -32,6 +32,21 @@ export default {
       return reg.fetch(new Request("https://registry/list_jobs"));
     }
 
+    // --- SETTINGS API ---
+    if (url.pathname === "/api/settings" && request.method === "GET") {
+      const reg = env.BOT.get(env.BOT.idFromName("registry"));
+      return reg.fetch(new Request("https://registry/get_github_token"));
+    }
+    if (url.pathname === "/api/settings" && request.method === "POST") {
+      const body = await request.json();
+      const reg = env.BOT.get(env.BOT.idFromName("registry"));
+      return reg.fetch(new Request("https://registry/set_github_token", {
+        method: "POST",
+        body: JSON.stringify(body)
+      }));
+    }
+    // --------------------
+
     if (url.pathname.startsWith("/api/bot/") && url.pathname.endsWith("/delete") && request.method === "POST") {
       const name = decodeURIComponent(url.pathname.split('/')[3]);
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
@@ -88,6 +103,7 @@ const HTML = `<!doctype html>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font-sys); overflow: hidden; }
   body { display: flex; flex-direction: column; height: 100dvh; }
+  
   header {
     display: flex; align-items: center; gap: 12px;
     padding: calc(env(safe-area-inset-top) + 12px) 20px 12px;
@@ -100,9 +116,10 @@ const HTML = `<!doctype html>
   .btn-icon {
     background: var(--surface); border: 1px solid var(--border); color: var(--text);
     border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
-    cursor: pointer; transition: all 0.2s; margin-left: auto;
+    cursor: pointer; transition: all 0.2s;
   }
   .btn-icon:active { background: var(--surface-hover); transform: scale(0.95); }
+  
   #main { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; }
   .tabs { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 4px; margin-bottom: 24px; }
   .tabs button {
@@ -121,12 +138,8 @@ const HTML = `<!doctype html>
   .bot-actions { display: flex; gap: 8px; align-items: center; }
   .btn-open { background: var(--text); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; }
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
-  .job-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px; margin-bottom: 12px; }
-  .job-card h3 { margin: 0 0 8px 0; font-size: 16px; color: var(--text); }
-  .job-card p { margin: 0 0 12px 0; font-size: 14px; color: var(--text-dim); }
-  .job-meta { display: flex; gap: 12px; font-size: 12px; color: var(--text-dim); border-top: 1px solid var(--border); padding-top: 12px; }
-  .job-meta span { display: flex; align-items: center; gap: 4px; }
-  #chat { display: none; flex-direction: column; height: 100%; background: var(--bg); }
+  
+  #chat { display: none; flex-direction: column; height: 100%; background: var(--bg); position: relative; }
   #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; }
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
   .msg { max-width: 85%; font-size: 16px; line-height: 1.5; animation: slideUp 0.3s ease-out; }
@@ -136,6 +149,7 @@ const HTML = `<!doctype html>
   .msg pre { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 12px; overflow-x: auto; margin: 8px 0; }
   .msg pre code { background: none; padding: 0; }
   .msg strong { color: #fff; font-weight: 600; }
+  
   .thoughts {
     align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--border);
     border-radius: 12px; margin-bottom: 4px; font-size: 13px; animation: fadeIn 0.3s;
@@ -149,6 +163,7 @@ const HTML = `<!doctype html>
   .thoughts[open] summary:before { transform: rotate(90deg); }
   .thoughts .content { padding: 0 14px 14px; font-family: var(--font-mono); color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
   .thoughts .content div { margin-bottom: 6px; }
+
   #chat-bar { 
     padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); 
     background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px);
@@ -165,18 +180,44 @@ const HTML = `<!doctype html>
     display: flex; align-items: center; justify-content: center; font-size: 20px; transition: transform 0.2s; flex-shrink: 0;
   }
   #chat-send:active { transform: scale(0.9); }
-  #chat-send:disabled { opacity: 0.3; }
   .cursor:after { content: "▋"; color: var(--text-dim); animation: blink 1s steps(2) infinite; margin-left: 2px; }
+  
+  /* SETTINGS MODAL */
+  #modal-settings {
+    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100;
+    align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(10px);
+  }
+  .modal-box {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px; width: 100%; max-width: 400px; animation: slideUp 0.2s ease-out;
+  }
+  .modal-box h2 { margin: 0 0 8px 0; font-size: 20px; }
+  .modal-box p { margin: 0 0 16px 0; font-size: 14px; color: var(--text-dim); }
+  .modal-box input {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text);
+    padding: 12px; border-radius: 8px; font-family: var(--font-mono); margin-bottom: 16px; outline: none;
+  }
+  .modal-box input:focus { border-color: #444; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
+  .modal-actions button { padding: 10px 16px; border-radius: 8px; font-weight: 600; border: none; font-size: 14px; }
+  .btn-cancel { background: transparent; color: var(--text-dim); }
+  .btn-save { background: var(--text); color: var(--bg); }
+
   @keyframes blink { 50% { opacity: 0; } }
   @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
   @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 </style>
 </head>
 <body>
+
 <header id="main-header">
   <div class="logo">Grok<span>Fleet</span></div>
-  <button class="btn-icon" id="btn-new-bot" title="New Bot">+</button>
+  <div style="display:flex; gap:8px; margin-left:auto;">
+    <button class="btn-icon" id="btn-settings" title="Settings">⚙</button>
+    <button class="btn-icon" id="btn-new-bot" title="New Bot">+</button>
+  </div>
 </header>
+
 <div id="main">
   <div class="tabs">
     <button id="tab-bots" class="active" onclick="switchTab('bots')">Agents</button>
@@ -184,6 +225,7 @@ const HTML = `<!doctype html>
   </div>
   <div id="list"></div>
 </div>
+
 <div id="chat">
   <header>
     <button class="btn-icon" id="btn-back" style="margin-left:0; border:none; background:none;">←</button>
@@ -196,6 +238,20 @@ const HTML = `<!doctype html>
     <button id="chat-send">↑</button>
   </div>
 </div>
+
+<!-- SETTINGS MODAL -->
+<div id="modal-settings">
+  <div class="modal-box">
+    <h2>Settings</h2>
+    <p>Paste your GitHub Personal Access Token so the bots can create repos and push code.</p>
+    <input type="password" id="input-github-token" placeholder="ghp_..." autocomplete="off" spellcheck="false">
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeSettings()">Cancel</button>
+      <button class="btn-save" onclick="saveSettings()">Save</button>
+    </div>
+  </div>
+</div>
+
 <script>
 const $ = s => document.querySelector(s);
 let currentBot = null;
@@ -253,14 +309,9 @@ async function loadJobs() {
   let html = '';
   if (jobs.length) {
     html = jobs.map(function(j) {
-      return '<div class="job-card">' +
-        '<h3>' + j.title + '</h3>' +
-        '<p>' + (j.description || 'No description') + '</p>' +
-        '<div class="job-meta">' +
-          '<span>👤 ' + j.assigned_to + '</span>' +
-          '<span>🚦 ' + j.status + '</span>' +
-          '<span>🛠 ' + j.creator + '</span>' +
-        '</div>' +
+      return '<div class="bot-card">' + 
+        '<div><h3>' + j.title + '</h3><p>' + (j.description || 'No description') + '</p></div>' +
+        '<div style="font-size:12px; color:var(--text-dim);">' + j.status + '</div>' +
       '</div>';
     }).join('');
   } else {
@@ -313,7 +364,7 @@ async function send() {
 
   const thoughtsEl = document.createElement('details');
   thoughtsEl.className = 'thoughts';
-  thoughtsEl.style.display = 'block'; // Now opens instantly
+  thoughtsEl.style.display = 'block'; 
   const summaryEl = document.createElement('summary');
   summaryEl.textContent = 'Thinking...';
   const contentEl = document.createElement('div');
@@ -404,8 +455,34 @@ $('#btn-new-bot').onclick = async () => {
   loadBots();
 };
 
+// SETTINGS LOGIC
+$('#btn-settings').onclick = async () => {
+  const data = await api('/api/settings');
+  if (data.token) {
+    $('#input-github-token').value = data.token;
+  }
+  $('#modal-settings').style.display = 'flex';
+};
+
+function closeSettings() {
+  $('#modal-settings').style.display = 'none';
+}
+
+async function saveSettings() {
+  const token = $('#input-github-token').value.trim();
+  await api('/api/settings', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token })
+  });
+  closeSettings();
+  alert('GitHub Token saved!');
+}
+
 window.openBot = openBot;
 window.deleteBot = deleteBot;
+window.closeSettings = closeSettings;
+window.saveSettings = saveSettings;
 switchTab('bots');
 </script>
 </body>
