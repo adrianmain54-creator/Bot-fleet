@@ -87,7 +87,7 @@ export class BotDurableObject {
       await this.ctx.storage.put("history", history.slice(-100));
       
       await this.ctx.storage.put("status", "working");
-      await this.ctx.storage.setAlarm(Date.now() + 100); // Trigger background task
+      await this.ctx.storage.setAlarm(Date.now() + 100);
       
       return Response.json({ ok: true, status: "working" });
     }
@@ -143,7 +143,7 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
     let steps = 0;
     let thoughts = [];
 
-    while (steps < 15) { // Safety limit to prevent infinite loops
+    while (steps < 15) { 
       const toolCall = this.parseTool(raw);
       if (!toolCall) break; 
       
