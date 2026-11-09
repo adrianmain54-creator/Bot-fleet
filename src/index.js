@@ -66,9 +66,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V9">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V10">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V9</title>
+<title>Grok Fleet V10</title>
 <style>
   :root {
     color-scheme: dark;
@@ -87,7 +87,6 @@ const HTML = `<!doctype html>
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font-sys); overflow: hidden; }
   
-  /* BUTTONS */
   .btn-icon {
     background: var(--surface); border: 1px solid var(--border); color: var(--text);
     border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center;
@@ -95,7 +94,6 @@ const HTML = `<!doctype html>
   }
   .btn-icon:active { background: var(--surface-hover); transform: scale(0.95); }
   
-  /* BOT CARDS */
   .bot-card {
     background: var(--surface); border: 1px solid var(--border); border-radius: 16px;
     padding: 16px 20px; margin-bottom: 12px; display: flex; justify-content: space-between; align-items: center;
@@ -108,13 +106,11 @@ const HTML = `<!doctype html>
   .btn-open { background: var(--text); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; }
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; }
   
-  /* CHAT */
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
   .msg { max-width: 85%; font-size: 16px; line-height: 1.5; animation: slideUp 0.3s ease-out; }
   .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; white-space: pre-wrap; }
   .msg.bot { align-self: flex-start; padding: 4px 0; white-space: pre-wrap; }
   
-  /* THOUGHTS DROPDOWN */
   .thoughts {
     align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--border);
     border-radius: 12px; margin-bottom: 4px; font-size: 13px;
@@ -129,7 +125,6 @@ const HTML = `<!doctype html>
   .thoughts .content { padding: 0 14px 14px; font-family: var(--font-mono); color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
   .thoughts .content div { margin-bottom: 6px; }
   
-  /* CHAT INPUT */
   #chat-input {
     flex: 1; background: var(--surface); color: var(--text); border: 1px solid var(--border);
     border-radius: 24px; padding: 12px 18px; font: inherit; font-size: 16px; resize: none; max-height: 120px;
@@ -143,7 +138,6 @@ const HTML = `<!doctype html>
   #chat-send:active { transform: scale(0.9); }
   #chat-send:disabled { opacity: 0.3; }
   
-  /* MODALS */
   .modal-overlay {
     display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100;
     align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(10px);
@@ -174,7 +168,7 @@ const HTML = `<!doctype html>
 <header id="main-header" style="display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top) + 12px) 20px 12px; background: rgba(0, 0, 0, 0.8); border-bottom: 1px solid #222; position: sticky; top: 0; z-index: 10;">
   <div style="display: flex; align-items: center; gap: 8px;">
     <div style="font: 700 20px var(--font-mono); letter-spacing: -0.5px;">Grok</div>
-    <div style="font: 500 11px var(--font-sys); color: #888; background: #0a0a0a; padding: 2px 6px; border-radius: 6px; border: 1px solid #222; text-transform: uppercase; letter-spacing: 0.5px;">Fleet V9</div>
+    <div style="font: 500 11px var(--font-sys); color: #888; background: #0a0a0a; padding: 2px 6px; border-radius: 6px; border: 1px solid #222; text-transform: uppercase; letter-spacing: 0.5px;">Fleet V10</div>
   </div>
   <div style="display: flex; gap: 8px;">
     <button class="btn-icon" id="btn-settings">⚙</button>
@@ -236,7 +230,8 @@ var pollInterval = null;
 function api(path, opts) {
   return fetch(path, opts).then(function(r) {
     if (!r.ok) throw new Error("Error " + r.status);
-    return r.headers.get('content-type').indexOf('json') > -1 ? r.json() : r.text();
+    var ct = r.headers.get('content-type') || '';
+    return ct.indexOf('json') > -1 ? r.json() : r.text();
   });
 }
 
@@ -295,7 +290,8 @@ function loadLog() {
       var m = data.messages[i];
       
       if (m.role === 'system' && m.content.startsWith('Thoughts:')) {
-        var lines = m.content.split('\n').slice(1);
+        // THE FIX: Using '|' as a separator instead of \n to avoid Safari syntax errors
+        var lines = m.content.replace('Thoughts:', '').split('|');
         html += '<details class="thoughts">';
         html += '<summary>Processed steps</summary>';
         html += '<div class="content">';
