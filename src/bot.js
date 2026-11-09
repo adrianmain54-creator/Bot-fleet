@@ -21,7 +21,7 @@ export class BotDurableObject {
 
     if (path === "/ensure_defaults") {
       let reg = (await this.ctx.storage.get("registry")) || [];
-      if (!Array.isArray(reg)) reg = []; // Fix corrupted state
+      if (!Array.isArray(reg)) reg = [];
       
       if (reg.length === 0) {
         const defaults = [{ name: "chief", instructions: "You are the Chief. ONLY use tools if the user asks you to build something. Do not build unprompted." }];
