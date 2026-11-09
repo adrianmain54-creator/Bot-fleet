@@ -13,7 +13,6 @@ export default {
 
     if (url.pathname === "/api/bots" && request.method === "POST") {
       const { name, instructions } = await request.json();
-      if (!name) return new Response("name required", { status: 400 });
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       await reg.fetch(new Request("https://registry/register", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
@@ -61,9 +60,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Fleet V2">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V3">
 <meta name="theme-color" content="#000000">
-<title>Grok Fleet V2</title>
+<title>Grok Fleet V3</title>
 <style>
   :root {
     color-scheme: dark;
@@ -167,7 +166,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
 <header id="main-header">
-  <div class="logo">Grok<span>Fleet V2</span></div>
+  <div class="logo">Grok<span>Fleet V3</span></div>
   <div style="display:flex; gap:8px; margin-left:auto;">
     <button class="btn-icon" id="btn-settings">⚙</button>
     <button class="btn-icon" id="btn-new-bot">+</button>
@@ -203,7 +202,6 @@ const HTML = `<!doctype html>
   </div>
 </div>
 <script>
-console.log("BACKGROUND V2 UI LOADED");
 const $ = s => document.querySelector(s);
 let currentBot = null;
 let currentTab = 'bots';
@@ -225,14 +223,15 @@ async function loadBots() {
   const bots = await api('/api/bots');
   let html = '';
   if (bots.length) {
-    html = bots.map(b => `
-      <div class="bot-card">
-        <div><h3>${b.name}</h3><p>${(b.instructions||'').slice(0,60)}</p></div>
-        <div class="bot-actions">
-          <button class="btn-open" onclick="openBot('${b.name}')">Chat</button>
-          <button class="btn-del" onclick="deleteBot('${b.name}')">✕</button>
-        </div>
-      </div>`).join('');
+    html = bots.map(function(b) {
+      return '<div class="bot-card">' +
+        '<div><h3>' + b.name + '</h3><p>' + (b.instructions||'').slice(0,60) + '</p></div>' +
+        '<div class="bot-actions">' +
+          '<button class="btn-open" onclick="openBot(\'' + b.name + '\')">Chat</button>' +
+          '<button class="btn-del" onclick="deleteBot(\'' + b.name + '\')">✕</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
   } else {
     html = '<p style="color:var(--text-dim);text-align:center;margin-top:40px">No agents yet. Tap + to create one.</p>';
   }
@@ -262,12 +261,17 @@ async function openBot(name) {
 async function loadLog() {
   const data = await api('/api/bot/' + encodeURIComponent(currentBot) + '/messages');
   const log = $('#chat-log');
-  log.innerHTML = data.messages.map(m => {
+  
+  let html = '';
+  for (let i=0; i<data.messages.length; i++) {
+    const m = data.messages[i];
     if (m.role === 'system') {
-      return '<div class="msg system">' + esc(m.content) + '</div>';
+      html += '<div class="msg system">' + esc(m.content) + '</div>';
+    } else {
+      html += '<div class="msg ' + m.role + '">' + (m.role === 'assistant' ? md(m.content) : esc(m.content)) + '</div>';
     }
-    return '<div class="msg ' + m.role + '">' + (m.role === 'assistant' ? md(m.content) : esc(m.content)) + '</div>';
-  }).join('');
+  }
+  log.innerHTML = html;
   log.scrollTop = log.scrollHeight;
 
   if (data.status === 'working') {
@@ -287,14 +291,18 @@ async function loadLog() {
 }
 
 function esc(s) {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  if (typeof s !== 'string') return '';
+  return s.replace(/[&<>"']/g, function(c) {
+    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  });
 }
 
 function md(raw) {
+  if (typeof raw !== 'string') return '';
   let s = esc(raw);
-  s = s.replace(/\`\`\`([\\s\\S]*?)\`\`\`/g, (_, c) => '<pre><code>' + c.replace(/^\\n/, '') + '</code></pre>');
-  s = s.replace(/\`([^\`\\n]+)\`/g, '<code>$1</code>');
-  s = s.replace(/\\*\\*([^*\\n]+)\\*\\*/g, '<strong>$1</strong>');
+  s = s.replace(/```([\s\S]*?)```/g, function(_, c) { return '<pre><code>' + c.replace(/^\n/, '') + '</code></pre>'; });
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
   return s;
 }
 
@@ -314,7 +322,6 @@ async function send() {
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ message: text }),
     });
-    
     loadLog();
   } catch (e) {
     alert('Error: ' + e.message);
@@ -322,15 +329,15 @@ async function send() {
 }
 
 $('#chat-send').onclick = send;
-$('#chat-input').addEventListener('keydown', e => {
+$('#chat-input').addEventListener('keydown', function(e) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); }
 });
-$('#chat-input').addEventListener('input', () => {
+$('#chat-input').addEventListener('input', function() {
   $('#chat-input').style.height = 'auto';
   $('#chat-input').style.height = Math.min($('#chat-input').scrollHeight, 120) + 'px';
 });
 
-$('#btn-back').onclick = () => {
+$('#btn-back').onclick = function() {
   currentBot = null;
   if (pollInterval) clearInterval(pollInterval);
   $('#chat').style.display = 'none';
@@ -339,7 +346,7 @@ $('#btn-back').onclick = () => {
   loadBots();
 };
 
-$('#btn-new-bot').onclick = async () => {
+$('#btn-new-bot').onclick = async function() {
   const name = prompt('Agent Name (no spaces):');
   if (!name) return;
   const instructions = prompt('System Instructions:') || '';
@@ -351,7 +358,7 @@ $('#btn-new-bot').onclick = async () => {
   loadBots();
 };
 
-$('#btn-settings').onclick = async () => {
+$('#btn-settings').onclick = async function() {
   const data = await api('/api/settings');
   if (data.token) $('#input-github-token').value = data.token;
   $('#modal-settings').style.display = 'flex';
