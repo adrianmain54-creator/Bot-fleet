@@ -129,7 +129,7 @@ Instructions: ${this.instructions}
 
 CRITICAL RULES:
 1. ONLY use tools if asked to build, search, or execute.
-2. If the user asks for something impossible (like compiling an IPA or building a VPN server in the chat), explain politely that you cannot do it and suggest an alternative. DO NOT try to use a tool if it won't work.
+2. If the user asks you to do something impossible for your environment (like compiling an .ipa file, since you are on a Linux server without Xcode), you MUST explain clearly that you cannot compile it, BUT you should STILL write the code and push it to GitHub so the user can compile it themselves.
 3. When finished, output a final plain-text summary.
 
 Tools (reply with ONLY raw JSON to use):
