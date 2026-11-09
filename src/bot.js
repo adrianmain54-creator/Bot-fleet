@@ -189,7 +189,7 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
 
     if (thoughts.length > 0) {
       const newHistory = (await this.ctx.storage.get("history")) || [];
-      newHistory.push({ role: "system", content: "Thoughts:\n" + thoughts.join("\n"), ts: Date.now() });
+      newHistory.push({ role: "system", content: "Thoughts:" + thoughts.join("|"), ts: Date.now() });
       await this.ctx.storage.put("history", newHistory.slice(-100));
     }
 
