@@ -129,7 +129,8 @@ Instructions: ${this.instructions}
 
 CRITICAL RULES:
 1. ONLY use tools if asked to build, search, or execute.
-2. When finished, output a final plain-text summary.
+2. If the user asks for something impossible (like compiling an IPA or building a VPN server in the chat), explain politely that you cannot do it and suggest an alternative. DO NOT try to use a tool if it won't work.
+3. When finished, output a final plain-text summary.
 
 Tools (reply with ONLY raw JSON to use):
 - {"tool":"search","query":"..."}
@@ -181,7 +182,7 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
     }
 
     if (raw.trim().startsWith('{"tool"')) {
-       return "I got stuck trying to use a tool.";
+       return "I got stuck trying to use a tool. Please try a different prompt.";
     }
 
     return raw;
