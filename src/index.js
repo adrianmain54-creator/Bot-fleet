@@ -61,9 +61,9 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Grok Bot">
+<meta name="apple-mobile-web-app-title" content="Grok Fleet V2">
 <meta name="theme-color" content="#000000">
-<title>Grok Bot</title>
+<title>Grok Fleet V2</title>
 <style>
   :root {
     color-scheme: dark;
@@ -167,7 +167,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
 <header id="main-header">
-  <div class="logo">Grok<span>Fleet</span></div>
+  <div class="logo">Grok<span>Fleet V2</span></div>
   <div style="display:flex; gap:8px; margin-left:auto;">
     <button class="btn-icon" id="btn-settings">⚙</button>
     <button class="btn-icon" id="btn-new-bot">+</button>
@@ -203,6 +203,7 @@ const HTML = `<!doctype html>
   </div>
 </div>
 <script>
+console.log("BACKGROUND V2 UI LOADED");
 const $ = s => document.querySelector(s);
 let currentBot = null;
 let currentTab = 'bots';
@@ -274,12 +275,14 @@ async function loadLog() {
       pollInterval = setInterval(loadLog, 3000);
     }
     $('#chat-send').disabled = true;
+    $('#chat-input').placeholder = "Working in background...";
   } else {
     if (pollInterval) {
       clearInterval(pollInterval);
       pollInterval = null;
     }
     $('#chat-send').disabled = false;
+    $('#chat-input').placeholder = "Message...";
   }
 }
 
@@ -312,7 +315,6 @@ async function send() {
       body: JSON.stringify({ message: text }),
     });
     
-    // Instantly load log to show the "working" state and start polling
     loadLog();
   } catch (e) {
     alert('Error: ' + e.message);
