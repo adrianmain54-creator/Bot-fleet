@@ -10,12 +10,19 @@ export class BotDurableObject {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    if (path === "/reset") {
+      await this.ctx.storage.deleteAll();
+      return Response.json({ ok: true });
+    }
+
     if (path === "/list") {
       return Response.json((await this.ctx.storage.get("registry")) || []);
     }
 
     if (path === "/ensure_defaults") {
-      const reg = (await this.ctx.storage.get("registry")) || [];
+      let reg = (await this.ctx.storage.get("registry")) || [];
+      if (!Array.isArray(reg)) reg = []; // Fix corrupted state
+      
       if (reg.length === 0) {
         const defaults = [{ name: "chief", instructions: "You are the Chief. ONLY use tools if the user asks you to build something. Do not build unprompted." }];
         for (const bot of defaults) {
