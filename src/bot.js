@@ -64,6 +64,11 @@ export class BotDurableObject {
       return new Response("ok");
     }
 
+    if (path === "/reset") {
+      await this.ctx.storage.deleteAll();
+      return new Response("reset");
+    }
+
     if (path === "/delete") {
       await this.ctx.storage.deleteAll();
       return new Response("deleted");
