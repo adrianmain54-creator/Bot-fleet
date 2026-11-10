@@ -10,60 +10,37 @@ export default {
       await reg.fetch(new Request("https://registry/reset"));
       return Response.json({ ok: true });
     }
-
     if (url.pathname === "/api/bots" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/ensure_defaults"));
     }
-
     if (url.pathname === "/api/bots" && request.method === "POST") {
       const { name, instructions } = await request.json();
-      
-      // SECURITY PATCH: Block registry wipe
-      if (!name || name === "registry" || name.trim() === "") {
-        return Response.json({ error: "invalid name" }, { status: 400 });
-      }
-
+      if (!name || name === "registry") return Response.json({ error: "invalid name" }, { status: 400 });
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/register", {
-        method: "POST",
-        body: JSON.stringify({ name, instructions })
-      }));
+      await reg.fetch(new Request("https://registry/register", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
-      await stub.fetch(new Request("https://bot/init", {
-        method: "POST",
-        body: JSON.stringify({ name, instructions })
-      }));
+      await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       return Response.json({ ok: true });
     }
-
     if (url.pathname === "/api/settings" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/get_github_token"));
     }
-
     if (url.pathname === "/api/settings" && request.method === "POST") {
       const body = await request.json();
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      return reg.fetch(new Request("https://registry/set_github_token", {
-        method: "POST",
-        body: JSON.stringify(body)
-      }));
+      return reg.fetch(new Request("https://registry/set_github_token", { method: "POST", body: JSON.stringify(body) }));
     }
-
     if (url.pathname.startsWith("/api/bot/") && url.pathname.endsWith("/delete") && request.method === "POST") {
       const name = decodeURIComponent(url.pathname.split('/')[3]);
-      if (name === "registry") return new Response("cannot delete registry", { status: 400 });
+      if (name === "registry") return new Response("cannot delete", { status: 400 });
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/unregister", {
-        method: "POST",
-        body: JSON.stringify({ name })
-      }));
+      await reg.fetch(new Request("https://registry/unregister", { method: "POST", body: JSON.stringify({ name }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
       await stub.fetch(new Request("https://bot/delete", { method: "POST" }));
       return Response.json({ ok: true });
     }
-
     const botMatch = url.pathname.match(/^\/api\/bot\/([^/]+)\/(.+)$/);
     if (botMatch) {
       const name = decodeURIComponent(botMatch[1]);
@@ -73,10 +50,7 @@ export default {
       target.search = url.search;
       return stub.fetch(new Request(target, request));
     }
-
-    return new Response(HTML, {
-      headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" }
-    });
+    return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
 };
 
@@ -90,16 +64,11 @@ const HTML = `<!doctype html>
 <title>Grok Fleet</title>
 <style>
   :root {
-    --bg: #000000;
-    --surface: #0a0a0a;
-    --border: #222222;
-    --text: #f5f5f5;
-    --text-dim: #888888;
-    --user-bubble: #1c1c1e;
+    --bg: #000000; --surface: #0a0a0a; --border: #222222;
+    --text: #f5f5f5; --text-dim: #888888; --user-bubble: #1c1c1e;
   }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body { margin: 0; height: 100vh; background: var(--bg); color: var(--text); font: 16px/1.5 -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
-  
   header { display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top) + 12px) 20px 12px; background: rgba(0,0,0,0.8); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; flex-shrink: 0; }
   .logo { font: 700 20px monospace; display: flex; align-items: center; gap: 8px; }
   .logo span { font: 500 11px -apple-system; color: var(--text-dim); background: var(--surface); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); text-transform: uppercase; }
