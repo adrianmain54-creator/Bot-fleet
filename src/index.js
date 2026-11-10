@@ -1,3 +1,4 @@
+// START OF FILE
 import { BotDurableObject } from "./bot.js";
 export { BotDurableObject };
 
@@ -95,7 +96,6 @@ const HTML = `<!doctype html>
   .btn-open { background: var(--text); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; cursor: pointer; }
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
   
-  /* FIXED FLEXBOX FOR CHAT */
   #chat { display: none; flex-direction: column; flex: 1; position: relative; min-height: 0; overflow: hidden; }
   #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; z-index: 10; }
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; min-height: 0; }
@@ -111,7 +111,6 @@ const HTML = `<!doctype html>
   .thoughts .content { padding: 0 14px 14px; font-family: monospace; color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
   .thoughts .content div { margin-bottom: 6px; }
 
-  /* FIXED INPUT BAR */
   #chat-bar { padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); background: #000; border-top: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-end; flex-shrink: 0; }
   #chat-input { flex: 1; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 24px; padding: 12px 18px; font: inherit; font-size: 16px; resize: none; max-height: 120px; outline: none; }
   #chat-send { background: var(--text); color: var(--bg); border: none; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; cursor: pointer; }
@@ -367,3 +366,4 @@ loadBots();
 </script>
 </body>
 </html>`;
+// END OF FILE
