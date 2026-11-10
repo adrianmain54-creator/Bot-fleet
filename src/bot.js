@@ -10,7 +10,7 @@ export class BotDurableObject {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // PATCH: Load name and instructions on every request to survive cold starts
+    // Load name and instructions on every request to survive cold starts
     if (!this.name) {
       this.name = (await this.ctx.storage.get("name")) || "unnamed";
       this.instructions = (await this.ctx.storage.get("instructions")) || "You are a helpful autonomous developer.";
@@ -77,48 +77,55 @@ export class BotDurableObject {
 
     if (path === "/messages") {
       const msgs = (await this.ctx.storage.get("history")) || [];
-      return Response.json(msgs);
+      const status = (await this.ctx.storage.get("status")) || "idle";
+      const thoughts = (await this.ctx.storage.get("thoughts")) || [];
+      return Response.json({ messages: msgs, status, thoughts });
     }
 
     if (path === "/message" && request.method === "POST") {
       const { message } = await request.json();
-      return this.handleMessage(message);
+      
+      const history = (await this.ctx.storage.get("history")) || [];
+      history.push({ role: "user", content: message, ts: Date.now() });
+      await this.ctx.storage.put("history", history.slice(-100));
+      
+      await this.ctx.storage.put("status", "working");
+      await this.ctx.storage.put("thoughts", ["Reading workspace..."]);
+      
+      await this.ctx.storage.setAlarm(Date.now() + 100);
+      
+      return Response.json({ ok: true, status: "working" });
     }
 
     return new Response("not found", { status: 404 });
   }
 
-  async handleMessage(userMessage) {
-    const history = (await this.ctx.storage.get("history")) || [];
-    history.push({ role: "user", content: userMessage, ts: Date.now() });
-    await this.ctx.storage.put("history", history.slice(-40));
+  async alarm() {
+    const status = await this.ctx.storage.get("status");
+    if (status !== "working") return;
 
-    const stream = new ReadableStream({
-      start: async (controller) => {
-        const enc = new TextEncoder();
-        const send = (o) => controller.enqueue(enc.encode(JSON.stringify(o) + "\n"));
-        try {
-          let reply = await this.runAgent(userMessage, history, send);
-          for (let i = 0; i < reply.length; i += 60) {
-            send({ type: "delta", text: reply.slice(i, i + 60) });
-          }
-          history.push({ role: "assistant", content: reply, ts: Date.now() });
-          await this.ctx.storage.put("history", history.slice(-40));
-          send({ type: "done" });
-        } catch (e) {
-          send({ type: "error", text: String(e.message || e) });
-        }
-        controller.close();
-      },
-    });
+    try {
+      const history = (await this.ctx.storage.get("history")) || [];
+      const lastMsg = history.filter(m => m.role === "user").pop();
+      if (!lastMsg) throw new Error("No message.");
 
-    return new Response(stream, {
-      headers: { "content-type": "application/x-ndjson", "cache-control": "no-store" },
-    });
+      const reply = await this.runAgent(lastMsg.content, history);
+      
+      const newHistory = (await this.ctx.storage.get("history")) || [];
+      newHistory.push({ role: "assistant", content: reply, ts: Date.now() });
+      await this.ctx.storage.put("history", newHistory.slice(-100));
+
+    } catch (e) {
+      const newHistory = (await this.ctx.storage.get("history")) || [];
+      newHistory.push({ role: "assistant", content: "Error: " + e.message, ts: Date.now() });
+      await this.ctx.storage.put("history", newHistory.slice(-100));
+    } finally {
+      await this.ctx.storage.put("status", "idle");
+      await this.ctx.storage.delete("thoughts");
+    }
   }
 
-  async runAgent(userMessage, history, send) {
-    // PATCH: Actually use this.instructions
+  async runAgent(userMessage, history) {
     const system = `You are "${this.name}".
 ${this.instructions}
 
@@ -145,16 +152,22 @@ Do NOT wrap JSON in markdown.`;
 
     let raw = await this.askBrain(messages);
     let steps = 0;
+    let thoughts = ["Analyzing..."];
+
+    const addThought = async (txt) => {
+      thoughts.push(txt);
+      await this.ctx.storage.put("thoughts", thoughts);
+    };
 
     while (steps < 15) {
       const toolCall = this.parseTool(raw);
       if (!toolCall) break; 
       
       steps++;
-      send({ type: "status", text: `Step ${steps}: Using ${toolCall.tool}...` });
+      await addThought(`Step ${steps}: Using ${toolCall.tool}...`);
       
       const result = await this.runTool(toolCall);
-      send({ type: "status", text: `Result: ${result.slice(0, 100)}...` });
+      await addThought(`Result: ${result.slice(0, 100)}...`);
       
       if (result.includes("GITHUB_TOKEN is not set")) {
         return "Please tap the ⚙ gear icon and add your GitHub token.";
@@ -197,7 +210,6 @@ Do NOT wrap JSON in markdown.`;
     return (await res.json()).token;
   }
 
-  // PATCH: UTF-8 Safe Base64
   utf8ToBase64(str) {
     return btoa(unescape(encodeURIComponent(str)));
   }
@@ -217,7 +229,6 @@ Do NOT wrap JSON in markdown.`;
 
       if (tool === "github_list_files") {
         try {
-          // PATCH: Try main, fallback to master
           let res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/git/trees/main?recursive=1`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
           if (!res.ok) {
              res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/git/trees/master?recursive=1`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
@@ -237,7 +248,6 @@ Do NOT wrap JSON in markdown.`;
       }
 
       if (tool === "github_push_file") {
-        // PATCH: Argument validation
         if (!args.repo || !args.path || args.content === undefined) return "Error: Missing repo, path, or content.";
         try {
           let sha = null;
@@ -267,7 +277,6 @@ Do NOT wrap JSON in markdown.`;
       if (tool === "github_create_repo") {
         if (!args.name) return "Error: Missing repo name.";
         try {
-          // PATCH: Default to private: true
           const res = await fetch("https://api.github.com/user/repos", { method: "POST", headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet", "content-type": "application/json" }, body: JSON.stringify({ name: args.name, description: args.description || "", private: true, auto_init: true }) });
           if (!res.ok) return "GitHub error: " + (await res.text());
           return `Repo created: ${(await res.json()).html_url}`;
