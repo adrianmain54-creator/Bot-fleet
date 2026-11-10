@@ -4,40 +4,59 @@ export { BotDurableObject };
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
+
     if (url.pathname === "/api/reset") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       await reg.fetch(new Request("https://registry/reset"));
       return Response.json({ ok: true });
     }
+
     if (url.pathname === "/api/bots" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/ensure_defaults"));
     }
+
     if (url.pathname === "/api/bots" && request.method === "POST") {
       const { name, instructions } = await request.json();
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/register", { method: "POST", body: JSON.stringify({ name, instructions }) }));
+      await reg.fetch(new Request("https://registry/register", {
+        method: "POST",
+        body: JSON.stringify({ name, instructions })
+      }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
-      await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify({ name, instructions }) }));
+      await stub.fetch(new Request("https://bot/init", {
+        method: "POST",
+        body: JSON.stringify({ name, instructions })
+      }));
       return Response.json({ ok: true });
     }
+
     if (url.pathname === "/api/settings" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/get_github_token"));
     }
+
     if (url.pathname === "/api/settings" && request.method === "POST") {
       const body = await request.json();
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      return reg.fetch(new Request("https://registry/set_github_token", { method: "POST", body: JSON.stringify(body) }));
+      return reg.fetch(new Request("https://registry/set_github_token", {
+        method: "POST",
+        body: JSON.stringify(body)
+      }));
     }
+
     if (url.pathname.startsWith("/api/bot/") && url.pathname.endsWith("/delete") && request.method === "POST") {
       const name = decodeURIComponent(url.pathname.split('/')[3]);
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/unregister", { method: "POST", body: JSON.stringify({ name }) }));
+      await reg.fetch(new Request("https://registry/unregister", {
+        method: "POST",
+        body: JSON.stringify({ name })
+      }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
       await stub.fetch(new Request("https://bot/delete", { method: "POST" }));
       return Response.json({ ok: true });
     }
+
     const botMatch = url.pathname.match(/^\/api\/bot\/([^/]+)\/(.+)$/);
     if (botMatch) {
       const name = decodeURIComponent(botMatch[1]);
@@ -47,7 +66,10 @@ export default {
       target.search = url.search;
       return stub.fetch(new Request(target, request));
     }
-    return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
+
+    return new Response(HTML, {
+      headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" }
+    });
   }
 };
 
