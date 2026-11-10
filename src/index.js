@@ -186,7 +186,6 @@ const HTML = `<!doctype html>
 var currentBot = null;
 var pollInterval = null;
 
-// SAFE API WRAPPER
 async function api(url, opts) {
   try {
     var r = await fetch(url, opts);
