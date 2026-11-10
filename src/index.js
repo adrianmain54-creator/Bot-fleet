@@ -10,48 +10,31 @@ export default {
       await reg.fetch(new Request("https://registry/reset"));
       return Response.json({ ok: true });
     }
-
     if (url.pathname === "/api/bots" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/ensure_defaults"));
     }
-
     if (url.pathname === "/api/bots" && request.method === "POST") {
       const { name, instructions } = await request.json();
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/register", {
-        method: "POST",
-        body: JSON.stringify({ name, instructions })
-      }));
+      await reg.fetch(new Request("https://registry/register", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
-      await stub.fetch(new Request("https://bot/init", {
-        method: "POST",
-        body: JSON.stringify({ name, instructions })
-      }));
+      await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       return Response.json({ ok: true });
     }
-
     if (url.pathname === "/api/settings" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/get_github_token"));
     }
-
     if (url.pathname === "/api/settings" && request.method === "POST") {
       const body = await request.json();
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      return reg.fetch(new Request("https://registry/set_github_token", {
-        method: "POST",
-        body: JSON.stringify(body)
-      }));
+      return reg.fetch(new Request("https://registry/set_github_token", { method: "POST", body: JSON.stringify(body) }));
     }
-
     if (url.pathname.startsWith("/api/bot/") && url.pathname.endsWith("/delete") && request.method === "POST") {
       const name = decodeURIComponent(url.pathname.split('/')[3]);
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/unregister", {
-        method: "POST",
-        body: JSON.stringify({ name })
-      }));
+      await reg.fetch(new Request("https://registry/unregister", { method: "POST", body: JSON.stringify({ name }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
       await stub.fetch(new Request("https://bot/delete", { method: "POST" }));
       return Response.json({ ok: true });
@@ -67,9 +50,7 @@ export default {
       return stub.fetch(new Request(target, request));
     }
 
-    return new Response(HTML, {
-      headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" }
-    });
+    return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
 };
 
@@ -80,80 +61,51 @@ const HTML = `<!doctype html>
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#000000">
 <title>Grok Fleet</title>
 <style>
-  :root {
-    color-scheme: dark;
-    --bg: #000000;
-    --surface: #0a0a0a;
-    --border: #222222;
-    --text: #f5f5f5;
-    --text-dim: #888888;
-    --user-bubble: #1c1c1e;
-    --font-sys: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    --font-mono: ui-monospace, "SF Mono", Menlo, Monaco, Consolas, monospace;
-  }
+  :root { --bg: #000; --surf: #0a0a0a; --bord: #222; --txt: #f5f5f5; --dim: #888; --bubble: #1c1c1e; }
   * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
-  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); font: 16px/1.5 var(--font-sys); overflow: hidden; }
-  body { display: flex; flex-direction: column; }
-  
-  /* Header */
-  header { display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top) + 12px) 20px 12px; background: rgba(0,0,0,0.8); backdrop-filter: blur(20px); border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 10; }
-  .logo { font: 700 20px var(--font-mono); letter-spacing: -0.5px; display: flex; align-items: center; gap: 8px; }
-  .logo span { font: 500 11px var(--font-sys); color: var(--text-dim); background: var(--surface); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--border); text-transform: uppercase; }
-  .btn-icon { background: var(--surface); border: 1px solid var(--border); color: var(--text); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; transition: transform 0.2s; }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--txt); font: 16px/1.5 -apple-system, sans-serif; overflow: hidden; display: flex; flex-direction: column; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: calc(env(safe-area-inset-top) + 12px) 20px 12px; background: rgba(0,0,0,0.8); border-bottom: 1px solid var(--bord); position: sticky; top: 0; z-index: 10; }
+  .logo { font: 700 20px monospace; display: flex; align-items: center; gap: 8px; }
+  .logo span { font: 500 11px -apple-system; color: var(--dim); background: var(--surf); padding: 2px 6px; border-radius: 6px; border: 1px solid var(--bord); text-transform: uppercase; }
+  .btn-icon { background: var(--surf); border: 1px solid var(--bord); color: var(--txt); border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; font-size: 16px; cursor: pointer; }
   .btn-icon:active { background: #141414; transform: scale(0.95); }
-  
-  /* Main List View */
   #main { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
-  .agent-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
+  .agent-card { background: var(--surf); border: 1px solid var(--bord); border-radius: 16px; padding: 16px 20px; display: flex; justify-content: space-between; align-items: center; }
   .agent-card h3 { margin: 0 0 4px 0; font-size: 16px; font-weight: 600; }
-  .agent-card p { margin: 0; color: var(--text-dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
+  .agent-card p { margin: 0; color: var(--dim); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 200px; }
   .agent-actions { display: flex; gap: 8px; align-items: center; }
-  .btn-open { background: var(--text); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; cursor: pointer; }
+  .btn-open { background: var(--txt); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; cursor: pointer; }
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
-  
-  /* Chat View */
   #chat { display: none; flex-direction: column; height: 100%; position: relative; }
   #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; }
-  #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; scroll-behavior: smooth; }
-  
-  .msg { max-width: 85%; font-size: 16px; line-height: 1.5; white-space: pre-wrap; animation: fadeIn 0.3s ease-out; }
-  .msg.user { align-self: flex-end; background: var(--user-bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; }
+  #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; }
+  .msg { max-width: 85%; font-size: 16px; line-height: 1.5; white-space: pre-wrap; }
+  .msg.user { align-self: flex-end; background: var(--bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; }
   .msg.bot { align-self: flex-start; padding: 4px 0; }
-  
-  /* Thinking Box */
-  .thoughts { align-self: flex-start; max-width: 85%; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; margin-bottom: 4px; font-size: 13px; }
-  .thoughts summary { padding: 10px 14px; cursor: pointer; color: var(--text-dim); font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; outline: none; }
+  .thoughts { align-self: flex-start; max-width: 85%; background: var(--surf); border: 1px solid var(--bord); border-radius: 12px; margin-bottom: 4px; font-size: 13px; }
+  .thoughts summary { padding: 10px 14px; cursor: pointer; color: var(--dim); font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; outline: none; }
   .thoughts summary::-webkit-details-marker { display: none; }
   .thoughts summary:before { content: "▶"; font-size: 10px; transition: transform 0.2s; }
   .thoughts[open] summary:before { transform: rotate(90deg); }
-  .thoughts .content { padding: 0 14px 14px; font-family: var(--font-mono); color: var(--text-dim); border-top: 1px solid var(--border); margin-top: 4px; padding-top: 10px; }
+  .thoughts .content { padding: 0 14px 14px; font-family: monospace; color: var(--dim); border-top: 1px solid var(--bord); margin-top: 4px; padding-top: 10px; }
   .thoughts .content div { margin-bottom: 6px; }
-
-  /* Chat Input Bar */
-  #chat-bar { padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); background: rgba(0, 0, 0, 0.8); backdrop-filter: blur(20px); border-top: 1px solid var(--border); display: flex; gap: 12px; align-items: flex-end; }
-  #chat-input { flex: 1; background: var(--surface); color: var(--text); border: 1px solid var(--border); border-radius: 24px; padding: 12px 18px; font: inherit; font-size: 16px; resize: none; max-height: 120px; outline: none; }
-  #chat-input:focus { border-color: #444; }
-  #chat-send { background: var(--text); color: var(--bg); border: none; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px; cursor: pointer; transition: transform 0.2s; flex-shrink: 0; }
-  #chat-send:active { transform: scale(0.9); }
+  #chat-bar { padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); background: rgba(0,0,0,0.8); border-top: 1px solid var(--bord); display: flex; gap: 12px; align-items: flex-end; }
+  #chat-input { flex: 1; background: var(--surf); color: var(--txt); border: 1px solid var(--bord); border-radius: 24px; padding: 12px 18px; font: inherit; font-size: 16px; resize: none; max-height: 120px; outline: none; }
+  #chat-send { background: var(--txt); color: var(--bg); border: none; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; cursor: pointer; }
   #chat-send:disabled { opacity: 0.3; }
-
-  /* Modals */
-  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; padding: 20px; backdrop-filter: blur(10px); }
-  .modal-box { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; }
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
+  .modal-box { background: var(--surf); border: 1px solid var(--bord); border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; }
   .modal-box h2 { margin: 0 0 8px 0; font-size: 20px; }
-  .modal-box p { margin: 0 0 16px 0; font-size: 14px; color: var(--text-dim); }
-  .modal-box input, .modal-box textarea { width: 100%; background: var(--bg); border: 1px solid var(--border); color: var(--text); padding: 12px; border-radius: 8px; font-family: inherit; margin-bottom: 16px; outline: none; font-size: 15px; }
+  .modal-box p { margin: 0 0 16px 0; font-size: 14px; color: var(--dim); }
+  .modal-box input, .modal-box textarea { width: 100%; background: var(--bg); border: 1px solid var(--bord); color: var(--txt); padding: 12px; border-radius: 8px; font-family: inherit; margin-bottom: 16px; outline: none; font-size: 15px; }
   .modal-box textarea { resize: vertical; min-height: 80px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 12px; }
   .modal-actions button { padding: 10px 16px; border-radius: 8px; font-weight: 600; border: none; font-size: 14px; cursor: pointer; }
-  .btn-cancel { background: transparent; color: var(--text-dim); }
-  .btn-save { background: var(--text); color: var(--bg); }
+  .btn-cancel { background: transparent; color: var(--dim); }
+  .btn-save { background: var(--txt); color: var(--bg); }
   .btn-danger { background: #ff453a22; color: #ff453a; border: 1px solid #ff453a55; width: 100%; margin-top: 10px; padding: 12px; border-radius: 8px; font-weight: 600; font-size: 14px; cursor: pointer; }
-  
-  @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
 </style>
 </head>
 <body>
@@ -164,9 +116,7 @@ const HTML = `<!doctype html>
     <button class="btn-icon" onclick="openNewAgent()">+</button>
   </div>
 </header>
-<div id="main">
-  <div id="list" style="display:flex; flex-direction:column; gap:12px;"></div>
-</div>
+<div id="main"><div id="list" style="display:flex; flex-direction:column; gap:12px;"></div></div>
 <div id="chat">
   <header>
     <button class="btn-icon" onclick="goBack()" style="border:none; background:none; font-size:20px;">←</button>
@@ -179,11 +129,9 @@ const HTML = `<!doctype html>
     <button id="chat-send" onclick="sendMessage()">↑</button>
   </div>
 </div>
-
 <div class="modal-overlay" id="modal-settings">
   <div class="modal-box">
-    <h2>Settings</h2>
-    <p>Paste your GitHub Token.</p>
+    <h2>Settings</h2><p>Paste your GitHub Token.</p>
     <input type="password" id="input-github-token" placeholder="ghp_...">
     <div class="modal-actions" style="margin-bottom:10px;">
       <button class="btn-cancel" onclick="closeModal('modal-settings')">Cancel</button>
@@ -203,68 +151,34 @@ const HTML = `<!doctype html>
     </div>
   </div>
 </div>
-
 <script>
 var currentBot = null;
+var pollInterval = null;
 
 function api(url, opts) {
-  return fetch(url, opts).then(function(r) {
-    var ct = r.headers.get('content-type') || '';
-    return ct.indexOf('json') > -1 ? r.json() : r.text();
-  });
+  return fetch(url, opts).then(function(r) { return r.json(); });
 }
 
 function loadBots() {
   api('/api/bots').then(function(bots) {
     var list = document.getElementById('list');
     list.innerHTML = '';
-    
-    if (!Array.isArray(bots)) {
-      list.innerHTML = '<p style="color:red;text-align:center;">Error. Tap ⚙ to reset.</p>';
-      return;
-    }
-    if (!bots.length) {
-      list.innerHTML = '<p style="color:#888;text-align:center;">No agents yet. Tap + to create one.</p>';
-      return;
-    }
+    if (!Array.isArray(bots) || !bots.length) return list.innerHTML = '<p style="color:#888;text-align:center;">No agents yet. Tap + to create one.</p>';
     
     for (var i = 0; i < bots.length; i++) {
       var b = bots[i];
-      
-      var card = document.createElement('div');
-      card.className = 'agent-card';
-      
+      var card = document.createElement('div'); card.className = 'agent-card';
       var info = document.createElement('div');
-      var h3 = document.createElement('h3');
-      h3.textContent = b.name;
-      var p = document.createElement('p');
-      p.textContent = (b.instructions || '').slice(0, 60);
-      info.appendChild(h3);
-      info.appendChild(p);
-      
-      var actions = document.createElement('div');
-      actions.className = 'agent-actions';
-      
-      var btnOpen = document.createElement('button');
-      btnOpen.className = 'btn-open';
-      btnOpen.textContent = 'Chat';
-      btnOpen.onclick = (function(name) {
-        return function() { openBot(name); };
-      })(b.name);
-      
-      var btnDel = document.createElement('button');
-      btnDel.className = 'btn-del';
-      btnDel.textContent = '✕';
-      btnDel.onclick = (function(name) {
-        return function() { deleteBot(name); };
-      })(b.name);
-      
-      actions.appendChild(btnOpen);
-      actions.appendChild(btnDel);
-      
-      card.appendChild(info);
-      card.appendChild(actions);
-      list.appendChild(card);
+      var h3 = document.createElement('h3'); h3.textContent = b.name;
+      var p = document.createElement('p'); p.textContent = (b.instructions || '').slice(0, 60);
+      info.appendChild(h3); info.appendChild(p);
+      var actions = document.createElement('div'); actions.className = 'agent-actions';
+      var btnOpen = document.createElement('button'); btnOpen.className = 'btn-open'; btnOpen.textContent = 'Chat';
+      btnOpen.onclick = (function(n) { return function() { openBot(n); }; })(b.name);
+      var btnDel = document.createElement('button'); btnDel.className = 'btn-del'; btnDel.textContent = '✕';
+      btnDel.onclick = (function(n) { return function() { deleteBot(n); }; })(b.name);
+      actions.appendChild(btnOpen); actions.appendChild(btnDel);
+      card.appendChild(info); card.appendChild(actions); list.appendChild(card);
     }
   });
 }
@@ -275,31 +189,61 @@ function openBot(name) {
   document.getElementById('main-header').style.display = 'none';
   document.getElementById('chat').style.display = 'flex';
   document.getElementById('chat-title').textContent = name;
-  loadLog();
+  loadLog(true);
 }
 
 function goBack() {
   currentBot = null;
+  if (pollInterval) clearInterval(pollInterval);
   document.getElementById('chat').style.display = 'none';
   document.getElementById('main').style.display = 'flex';
   document.getElementById('main-header').style.display = 'flex';
   loadBots();
 }
 
-function loadLog() {
+function loadLog(startPolling) {
   if (!currentBot) return;
-  api('/api/bot/' + currentBot + '/messages').then(function(msgs) {
-    if (!msgs) return;
+  api('/api/bot/' + currentBot + '/messages').then(function(data) {
     var log = document.getElementById('chat-log');
     log.innerHTML = '';
     
-    for (var i = 0; i < msgs.length; i++) {
-      var m = msgs[i];
+    for (var i = 0; i < data.messages.length; i++) {
+      var m = data.messages[i];
       var el = document.createElement('div');
       el.className = 'msg ' + (m.role === 'assistant' ? 'bot' : m.role);
       el.textContent = m.content;
       log.appendChild(el);
     }
+
+    if (data.status === 'working') {
+      var thoughtsEl = document.createElement('details');
+      thoughtsEl.className = 'thoughts';
+      thoughtsEl.open = true;
+      var summaryEl = document.createElement('summary');
+      summaryEl.textContent = 'Working in background...';
+      var contentEl = document.createElement('div');
+      contentEl.className = 'content';
+      if (data.thoughts) {
+        for (var k = 0; k < data.thoughts.length; k++) {
+          var p = document.createElement('div'); p.textContent = data.thoughts[k];
+          contentEl.appendChild(p);
+        }
+      }
+      thoughtsEl.appendChild(summaryEl); thoughtsEl.appendChild(contentEl);
+      log.appendChild(thoughtsEl);
+      
+      document.getElementById('chat-send').disabled = true;
+      document.getElementById('chat-send').textContent = '⏳';
+      
+      if (startPolling && !pollInterval) {
+        pollInterval = setInterval(function() { loadLog(false); }, 2000);
+      }
+    } else {
+      if (pollInterval) { clearInterval(pollInterval); pollInterval = null; }
+      document.getElementById('chat-send').disabled = false;
+      document.getElementById('chat-send').textContent = '↑';
+    }
+    
     log.scrollTop = log.scrollHeight;
   });
 }
@@ -315,64 +259,8 @@ function sendMessage() {
   u.className = 'msg user'; u.textContent = text;
   log.appendChild(u); log.scrollTop = log.scrollHeight;
 
-  var thoughtsEl = document.createElement('details');
-  thoughtsEl.className = 'thoughts';
-  thoughtsEl.style.display = 'none';
-  var summaryEl = document.createElement('summary');
-  summaryEl.textContent = 'Thinking...';
-  var contentEl = document.createElement('div');
-  contentEl.className = 'content';
-  thoughtsEl.appendChild(summaryEl);
-  thoughtsEl.appendChild(contentEl);
-  log.appendChild(thoughtsEl);
-
-  var botEl = document.createElement('div');
-  botEl.className = 'msg bot';
-  log.appendChild(botEl); log.scrollTop = log.scrollHeight;
-
-  document.getElementById('chat-send').disabled = true;
-
-  fetch('/api/bot/' + currentBot + '/message', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ message: text })
-  }).then(function(res) {
-    var reader = res.body.getReader();
-    var dec = new TextDecoder();
-    var buf = '', acc = '';
-    
-    function pump() {
-      return reader.read().then(function(r) {
-        if (r.done) {
-          document.getElementById('chat-send').disabled = false;
-          return;
-        }
-        buf += dec.decode(r.value, { stream: true });
-        var lines = buf.split(String.fromCharCode(10)); 
-        buf = lines.pop();
-        for (var i = 0; i < lines.length; i++) {
-          if (!lines[i].trim()) continue;
-          try {
-            var o = JSON.parse(lines[i]);
-            if (o.type === 'status') {
-              thoughtsEl.style.display = 'block';
-              var p = document.createElement('div');
-              p.textContent = o.text;
-              contentEl.appendChild(p);
-              summaryEl.textContent = 'Processed steps';
-            }
-            if (o.type === 'delta') { acc += o.text; botEl.textContent = acc; }
-            if (o.type === 'error') { acc += String.fromCharCode(10, 10) + o.text; botEl.textContent = acc; }
-          } catch (e) {}
-        }
-        log.scrollTop = log.scrollHeight;
-        return pump();
-      });
-    }
-    return pump();
-  }).catch(function(e) {
-    botEl.textContent = 'Error: ' + e.message;
-    document.getElementById('chat-send').disabled = false;
+  api('/api/bot/' + currentBot + '/message', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ message: text }) }).then(function() {
+    loadLog(true);
   });
 }
 
