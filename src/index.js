@@ -4,66 +4,42 @@ export { BotDurableObject };
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
-
     if (url.pathname === "/api/reset") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       await reg.fetch(new Request("https://registry/reset"));
       return Response.json({ ok: true });
     }
-
     if (url.pathname === "/api/bots" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/ensure_defaults"));
     }
-
     if (url.pathname === "/api/bots" && request.method === "POST") {
       const { name, instructions } = await request.json();
-      
-      // SECURITY PATCH: Block registry wipe
-      if (!name || name === "registry" || name.trim() === "") {
-        return Response.json({ error: "invalid name" }, { status: 400 });
-      }
-
+      if (!name || name === "registry") return Response.json({ error: "invalid name" }, { status: 400 });
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/register", {
-        method: "POST",
-        body: JSON.stringify({ name, instructions })
-      }));
+      await reg.fetch(new Request("https://registry/register", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
-      await stub.fetch(new Request("https://bot/init", {
-        method: "POST",
-        body: JSON.stringify({ name, instructions })
-      }));
+      await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify({ name, instructions }) }));
       return Response.json({ ok: true });
     }
-
     if (url.pathname === "/api/settings" && request.method === "GET") {
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
       return reg.fetch(new Request("https://registry/get_github_token"));
     }
-
     if (url.pathname === "/api/settings" && request.method === "POST") {
       const body = await request.json();
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      return reg.fetch(new Request("https://registry/set_github_token", {
-        method: "POST",
-        body: JSON.stringify(body)
-      }));
+      return reg.fetch(new Request("https://registry/set_github_token", { method: "POST", body: JSON.stringify(body) }));
     }
-
     if (url.pathname.startsWith("/api/bot/") && url.pathname.endsWith("/delete") && request.method === "POST") {
       const name = decodeURIComponent(url.pathname.split('/')[3]);
-      if (name === "registry") return new Response("cannot delete registry", { status: 400 });
+      if (name === "registry") return new Response("cannot delete", { status: 400 });
       const reg = env.BOT.get(env.BOT.idFromName("registry"));
-      await reg.fetch(new Request("https://registry/unregister", {
-        method: "POST",
-        body: JSON.stringify({ name })
-      }));
+      await reg.fetch(new Request("https://registry/unregister", { method: "POST", body: JSON.stringify({ name }) }));
       const stub = env.BOT.get(env.BOT.idFromName(name));
       await stub.fetch(new Request("https://bot/delete", { method: "POST" }));
       return Response.json({ ok: true });
     }
-
     const botMatch = url.pathname.match(/^\/api\/bot\/([^/]+)\/(.+)$/);
     if (botMatch) {
       const name = decodeURIComponent(botMatch[1]);
@@ -73,10 +49,7 @@ export default {
       target.search = url.search;
       return stub.fetch(new Request(target, request));
     }
-
-    return new Response(HTML, {
-      headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" }
-    });
+    return new Response(HTML, { headers: { "content-type": "text/html; charset=utf-8", "Cache-Control": "no-store" } });
   }
 };
 
@@ -84,129 +57,108 @@ const HTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Grok Fleet</title>
 <style>
-  body { font: 14px/1.4 system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; background: #111; color: #eee; }
-  h1 { font-size: 1.2rem; }
-  button { background: #222; color: #eee; border: 1px solid #444; padding: .4rem .8rem; border-radius: 4px; cursor: pointer; }
-  button:hover { background: #333; }
-  input, textarea { width: 100%; background: #1a1a1a; color: #eee; border: 1px solid #333; padding: .4rem; border-radius: 4px; margin: .25rem 0; }
-  .row { display: flex; gap: .5rem; align-items: center; margin: .5rem 0; }
-  .log { background: #000; border: 1px solid #333; padding: .5rem; border-radius: 4px; height: 200px; overflow-y: auto; white-space: pre-wrap; font-family: monospace; font-size: 12px; }
-  .muted { color: #888; }
+:root{--bg:#000;--srf:#0a0a0a;--brd:#222;--txt:#f5f5f5;--dim:#888;--bub:#1c1c1e}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100vh;background:var(--bg);color:var(--txt);font:16px/1.5 -apple-system,sans-serif;overflow:hidden;display:flex;flex-direction:column}
+header{display:flex;align-items:center;justify-content:space-between;padding:calc(env(safe-area-inset-top) + 12px) 20px 12px;background:rgba(0,0,0,.8);border-bottom:1px solid var(--brd);position:sticky;top:0;z-index:10}
+.logo{font:700 20px monospace;display:flex;align-items:center;gap:8px}
+.logo span{font:500 11px -apple-system;color:var(--dim);background:var(--srf);padding:2px 6px;border-radius:6px;border:1px solid var(--brd);text-transform:uppercase}
+.btn-i{background:var(--srf);border:1px solid var(--brd);color:var(--txt);border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:16px;cursor:pointer}
+.btn-i:active{background:#141414;transform:scale(.95)}
+#main{flex:1;overflow-y:auto;padding:20px;display:flex;flex-direction:column;gap:16px}
+.crd{background:var(--srf);border:1px solid var(--brd);border-radius:16px;padding:16px 20px;display:flex;justify-content:space-between;align-items:center}
+.crd h3{margin:0 0 4px 0;font-size:16px;font-weight:600}
+.crd p{margin:0;color:var(--dim);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.acts{display:flex;gap:8px;align-items:center}
+.b-o{background:var(--txt);color:var(--bg);border:none;border-radius:20px;padding:8px 16px;font-weight:600;font-size:13px;cursor:pointer}
+.b-d{background:none;color:#ff453a;border:1px solid #ff453a33;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:14px;cursor:pointer}
+#chat{display:none;flex-direction:column;height:100%;position:relative}
+#chat header{border:none;background:linear-gradient(to bottom,#000 0%,transparent 100%);position:absolute;width:100%;top:0}
+#clog{flex:1;overflow-y:auto;padding:80px 20px 20px;display:flex;flex-direction:column;gap:20px}
+.msg{max-width:85%;font-size:16px;line-height:1.5}
+.msg.u{align-self:flex-end;background:var(--bub);padding:12px 18px;border-radius:20px 20px 4px 20px;white-space:pre-wrap}
+.msg.b{align-self:flex-start;padding:4px 0;white-space:pre-wrap}
+.thn{align-self:flex-start;max-width:85%;background:var(--srf);border:1px solid var(--brd);border-radius:12px;margin-bottom:4px;font-size:13px}
+.thn summary{padding:10px 14px;color:var(--dim);list-style:none;display:flex;gap:8px;cursor:pointer}
+.thn summary::-webkit-details-marker{display:none}
+.thn summary:before{content:"▶";font-size:10px}
+.thn[open] summary:before{transform:rotate(90deg)}
+.thn .c{padding:0 14px 14px;font-family:monospace;color:var(--dim);border-top:1px solid var(--brd);margin-top:4px;padding-top:10px}
+.thn .c div{margin-bottom:6px}
+#cbar{padding:12px 20px calc(env(safe-area-inset-bottom) + 12px);background:rgba(0,0,0,.8);border-top:1px solid var(--brd);display:flex;gap:12px;align-items:flex-end}
+#ci{flex:1;background:var(--srf);color:var(--txt);border:1px solid var(--brd);border-radius:24px;padding:12px 18px;font:inherit;resize:none;max-height:120px;outline:none}
+#cs{background:var(--txt);color:var(--bg);border:none;border-radius:50%;width:44px;height:44px;display:flex;align-items:center;justify-content:center;font-size:20px;flex-shrink:0;cursor:pointer}
+#cs:disabled{opacity:.3}
+.mdl{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:100;align-items:center;justify-content:center;padding:20px}
+.mdl-b{background:var(--srf);border:1px solid var(--brd);border-radius:16px;padding:24px;width:100%;max-width:400px}
+.mdl-b h2{margin:0 0 8px;font-size:20px}
+.mdl-b p{margin:0 0 16px;font-size:14px;color:var(--dim)}
+.mdl-b input,.mdl-b textarea{width:100%;background:var(--bg);border:1px solid var(--brd);color:var(--txt);padding:12px;border-radius:8px;font-family:inherit;margin-bottom:16px;outline:none}
+.m-a{display:flex;justify-content:flex-end;gap:12px}
+.m-a button{padding:10px 16px;border-radius:8px;font-weight:600;border:none;font-size:14px;cursor:pointer}
+.b-c{background:none;color:var(--dim)}
+.b-s{background:var(--txt);color:var(--bg)}
+.b-dng{background:#ff453a22;color:#ff453a;border:1px solid #ff453a55;width:100%;margin-top:10px;padding:12px;border-radius:8px;font-weight:600;font-size:14px;cursor:pointer}
 </style>
 </head>
 <body>
-<h1>Grok Fleet</h1>
-<div class="row">
-  <button onclick="loadBots()">Refresh agents</button>
-  <button onclick="showSettings()">⚙ Settings</button>
-  <button onclick="resetApp()">Reset app</button>
+<header id="mh">
+  <div class="logo">Grok<span>Fleet</span></div>
+  <div style="display:flex;gap:8px">
+    <button class="btn-i" onclick="oS()">⚙</button>
+    <button class="btn-i" onclick="oN()">+</button>
+  </div>
+</header>
+<div id="main"><div id="list" style="display:flex;flex-direction:column;gap:12px"></div></div>
+<div id="chat">
+  <header>
+    <button class="btn-i" onclick="gB()" style="border:none;background:none;font-size:20px">←</button>
+    <div class="logo" id="ct" style="font-size:18px"></div>
+    <div style="width:36px"></div>
+  </header>
+  <div id="clog"></div>
+  <div id="cbar"><textarea id="ci" rows="1" placeholder="Message..."></textarea><button id="cs" onclick="sM()">↑</button></div>
 </div>
-<div id="settings" style="display:none">
-  <h2>Settings</h2>
-  <input id="token" placeholder="Paste GitHub Token" type="password">
-  <div class="row">
-    <button onclick="saveToken()">Save</button>
-    <button onclick="hideSettings()">Cancel</button>
+<div class="mdl" id="ms">
+  <div class="mdl-b">
+    <h2>Settings</h2>
+    <p>Paste your GitHub Token.</p>
+    <input type="password" id="igt" placeholder="ghp_...">
+    <div class="m-a" style="margin-bottom:10px"><button class="b-c" onclick="cM('ms')">Cancel</button><button class="b-s" onclick="sS()">Save</button></div>
+    <button class="b-dng" onclick="rA()">Reset App</button>
   </div>
 </div>
-<h2>New agent</h2>
-<input id="agentName" placeholder="Agent name">
-<textarea id="agentInstructions" rows="3" placeholder="Instructions"></textarea>
-<button onclick="createAgent()">Create</button>
-<h2>Agents</h2>
-<div id="agents"></div>
-<h2>Log</h2>
-<div id="log" class="log muted">ready</div>
+<div class="mdl" id="mn">
+  <div class="mdl-b">
+    <h2>New Agent</h2>
+    <input type="text" id="ian" placeholder="Name (no spaces)">
+    <textarea id="iai" placeholder="Instructions..."></textarea>
+    <div class="m-a"><button class="b-c" onclick="cM('mn')">Cancel</button><button class="b-s" onclick="cA()">Create</button></div>
+  </div>
+</div>
 <script>
-async function api(path, opts = {}) {
-  const r = await fetch(path, opts);
-  return r.json();
-}
-
-async function loadBots() {
-  try {
-    const bots = await api('/api/bots');
-    const el = document.getElementById('agents');
-    el.innerHTML = bots.map(b => 
-      '<div class="row"><strong>' + b.name + '</strong>' +
-      '<button onclick="deleteAgent(\'' + b.name + '\')">Delete</button>' +
-      '<button onclick="openChat(\'' + b.name + '\')">Open</button></div>'
-    ).join('') || '<span class="muted">no agents</span>';
-  } catch(e) { console.error(e); }
-}
-
-async function createAgent() {
-  const name = document.getElementById('agentName').value.trim();
-  const instructions = document.getElementById('agentInstructions').value.trim();
-  if (!name) return alert('name required');
-  await api('/api/bots', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name, instructions }) });
-  loadBots();
-}
-
-async function deleteAgent(name) {
-  await api('/api/bot/' + encodeURIComponent(name) + '/delete', { method: 'POST' });
-  loadBots();
-}
-
-async function resetApp() {
-  if (!confirm('Wipe everything?')) return;
-  await api('/api/reset', { method: 'POST' });
-  loadBots();
-}
-
-function showSettings() { document.getElementById('settings').style.display = 'block'; }
-function hideSettings() { document.getElementById('settings').style.display = 'none'; }
-
-async function saveToken() {
-  const token = document.getElementById('token').value.trim();
-  await api('/api/settings', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ token }) });
-  hideSettings();
-  log('token saved');
-}
-
-function log(s) {
-  const el = document.getElementById('log');
-  el.textContent += '\\n' + s;
-  el.scrollTop = el.scrollHeight;
-}
-
-function openChat(name) {
-  const msg = prompt('Message to ' + name);
-  if (msg) sendMessage(name, msg);
-}
-
-async function sendMessage(name, message) {
-  log('→ ' + message);
-  const res = await fetch('/api/bot/' + encodeURIComponent(name) + '/message', {
-    method: 'POST',
-    headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ message })
-  });
-  const reader = res.body.getReader();
-  const dec = new TextDecoder();
-  let buf = '';
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += dec.decode(value, { stream: true });
-    const lines = buf.split('\\n');
-    buf = lines.pop();
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const o = JSON.parse(line);
-        if (o.type === 'delta') log(o.text);
-        else if (o.type === 'status') log('[status] ' + o.text);
-        else if (o.type === 'error') log('[error] ' + o.text);
-        else if (o.type === 'done') log('[done]');
-      } catch {}
-    }
-  }
-}
-loadBots();
+var cB=null,pI=null;
+function api(u,o){return fetch(u,o).then(r=>r.json())}
+function lB(){api('/api/bots').then(b=>{var l=document.getElementById('list');l.innerHTML='';if(!Array.isArray(b)||!b.length)return l.innerHTML='<p style="color:#888;text-align:center;">No agents yet. Tap + to create one.</p>';for(var i=0;i<b.length;i++){var x=b[i],c=document.createElement('div');c.className='crd';var f=document.createElement('div'),h=document.createElement('h3');h.textContent=x.name;var p=document.createElement('p');p.textContent=(x.instructions||'').slice(0,60);f.appendChild(h);f.appendChild(p);var a=document.createElement('div');a.className='acts';var bo=document.createElement('button');bo.className='b-o';bo.textContent='Chat';bo.onclick=(function(n){return function(){oB(n)}})(x.name);var bd=document.createElement('button');bd.className='b-d';bd.textContent='✕';bd.onclick=(function(n){return function(){dB(n)}})(x.name);a.appendChild(bo);a.appendChild(bd);c.appendChild(f);c.appendChild(a);l.appendChild(c)}})}
+function oB(n){cB=n;document.getElementById('main').style.display='none';document.getElementById('mh').style.display='none';document.getElementById('chat').style.display='flex';document.getElementById('ct').textContent=n;lL(true)}
+function gB(){cB=null;if(pI)clearInterval(pI);document.getElementById('chat').style.display='none';document.getElementById('main').style.display='flex';document.getElementById('mh').style.display='flex';lB()}
+function lL(s){if(!cB)return;api('/api/bot/'+cB+'/messages').then(d=>{var l=document.getElementById('clog');l.innerHTML='';for(var i=0;i<d.messages.length;i++){var m=d.messages[i],e=document.createElement('div');e.className='msg '+(m.role==='assistant'?'b':'u');e.textContent=m.content;l.appendChild(e)}if(d.status==='working'){var t=document.createElement('details');t.className='thn';t.open=true;var su=document.createElement('summary');su.textContent='Working...';var co=document.createElement('div');co.className='c';if(d.thoughts){for(var k=0;k<d.thoughts.length;k++){var p=document.createElement('div');p.textContent=d.thoughts[k];co.appendChild(p)}}t.appendChild(su);t.appendChild(co);l.appendChild(t);document.getElementById('cs').disabled=true;document.getElementById('cs').textContent='⏳';if(s&&!pI){pI=setInterval(()=>lL(false),2000)}}else{if(pI){clearInterval(pI);pI=null}document.getElementById('cs').disabled=false;document.getElementById('cs').textContent='↑'}l.scrollTop=l.scrollHeight})}
+function sM(){var t=document.getElementById('ci').value.trim();if(!t||!cB)return;document.getElementById('ci').value='';document.getElementById('ci').style.height='auto';var l=document.getElementById('clog'),u=document.createElement('div');u.className='msg u';u.textContent=t;l.appendChild(u);l.scrollTop=l.scrollHeight;api('/api/bot/'+cB+'/message',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({message:t})}).then(()=>lL(true))}
+document.getElementById('ci').onkeydown=e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sM()}};
+document.getElementById('ci').oninput=function(){this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'};
+function oS(){api('/api/settings').then(d=>{if(d&&d.token)document.getElementById('igt').value=d.token;document.getElementById('ms').style.display='flex'})}
+function sS(){var t=document.getElementById('igt').value.trim();api('/api/settings',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({token:t})}).then(()=>{document.getElementById('ms').style.display='none'})}
+function oN(){document.getElementById('ian').value='';document.getElementById('iai').value='';document.getElementById('mn').style.display='flex'}
+function cA(){var n=document.getElementById('ian').value.trim(),i=document.getElementById('iai').value.trim();if(!n)return alert('Name required');api('/api/bots',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({name:n,instructions:i})}).then(()=>{document.getElementById('mn').style.display='none';lB()})}
+function dB(n){if(!confirm('Delete?'))return;api('/api/bot/'+n+'/delete',{method:'POST'}).then(lB)}
+function rA(){if(!confirm('Reset?'))return;fetch('/api/reset').then(()=>location.reload())}
+function cM(i){document.getElementById(i).style.display='none'}
+lB();
 </script>
 </body>
 </html>`;
