@@ -216,16 +216,56 @@ function api(url, opts) {
 
 function loadBots() {
   api('/api/bots').then(function(bots) {
-    if (!Array.isArray(bots)) return document.getElementById('list').innerHTML = '<p style="color:red;text-align:center;">Error. Tap ⚙ to reset.</p>';
-    if (!bots.length) return document.getElementById('list').innerHTML = '<p style="color:#888;text-align:center;">No agents yet. Tap + to create one.</p>';
+    var list = document.getElementById('list');
+    list.innerHTML = '';
     
-    var h = '';
-    for (var i = 0; i < bots.length; i++) {
-      h += '<div class="agent-card"><div><h3>' + bots[i].name + '</h3><p>' + (bots[i].instructions || '').slice(0, 60) + '</p></div>';
-      h += '<div class="agent-actions"><button class="btn-open" onclick="openBot(\'' + bots[i].name + '\')">Chat</button>';
-      h += '<button class="btn-del" onclick="deleteBot(\'' + bots[i].name + '\')">✕</button></div></div>';
+    if (!Array.isArray(bots)) {
+      list.innerHTML = '<p style="color:red;text-align:center;">Error. Tap ⚙ to reset.</p>';
+      return;
     }
-    document.getElementById('list').innerHTML = h;
+    if (!bots.length) {
+      list.innerHTML = '<p style="color:#888;text-align:center;">No agents yet. Tap + to create one.</p>';
+      return;
+    }
+    
+    for (var i = 0; i < bots.length; i++) {
+      var b = bots[i];
+      
+      var card = document.createElement('div');
+      card.className = 'agent-card';
+      
+      var info = document.createElement('div');
+      var h3 = document.createElement('h3');
+      h3.textContent = b.name;
+      var p = document.createElement('p');
+      p.textContent = (b.instructions || '').slice(0, 60);
+      info.appendChild(h3);
+      info.appendChild(p);
+      
+      var actions = document.createElement('div');
+      actions.className = 'agent-actions';
+      
+      var btnOpen = document.createElement('button');
+      btnOpen.className = 'btn-open';
+      btnOpen.textContent = 'Chat';
+      btnOpen.onclick = (function(name) {
+        return function() { openBot(name); };
+      })(b.name);
+      
+      var btnDel = document.createElement('button');
+      btnDel.className = 'btn-del';
+      btnDel.textContent = '✕';
+      btnDel.onclick = (function(name) {
+        return function() { deleteBot(name); };
+      })(b.name);
+      
+      actions.appendChild(btnOpen);
+      actions.appendChild(btnDel);
+      
+      card.appendChild(info);
+      card.appendChild(actions);
+      list.appendChild(card);
+    }
   });
 }
 
@@ -250,13 +290,16 @@ function loadLog() {
   if (!currentBot) return;
   api('/api/bot/' + currentBot + '/messages').then(function(msgs) {
     if (!msgs) return;
-    var h = '';
+    var log = document.getElementById('chat-log');
+    log.innerHTML = '';
+    
     for (var i = 0; i < msgs.length; i++) {
       var m = msgs[i];
-      h += '<div class="msg ' + (m.role === 'assistant' ? 'bot' : m.role) + '">' + m.content + '</div>';
+      var el = document.createElement('div');
+      el.className = 'msg ' + (m.role === 'assistant' ? 'bot' : m.role);
+      el.textContent = m.content;
+      log.appendChild(el);
     }
-    var log = document.getElementById('chat-log');
-    log.innerHTML = h;
     log.scrollTop = log.scrollHeight;
   });
 }
@@ -305,11 +348,8 @@ function sendMessage() {
           return;
         }
         buf += dec.decode(r.value, { stream: true });
-        
-        // THIS IS THE BULLETPROOF PARSER TO PREVENT CRASHES
         var lines = buf.split(String.fromCharCode(10)); 
         buf = lines.pop();
-        
         for (var i = 0; i < lines.length; i++) {
           if (!lines[i].trim()) continue;
           try {
