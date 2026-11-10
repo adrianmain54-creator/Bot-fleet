@@ -78,12 +78,22 @@ const HTML = `<!doctype html>
   .agent-actions { display: flex; gap: 8px; align-items: center; }
   .btn-open { background: var(--txt); color: var(--bg); border: none; border-radius: 20px; padding: 8px 16px; font-weight: 600; font-size: 13px; cursor: pointer; }
   .btn-del { background: transparent; color: #ff453a; border: 1px solid #ff453a33; border-radius: 50%; width: 32px; height: 32px; display: flex; align-items: center; justify-content: center; font-size: 14px; cursor: pointer; }
+  
   #chat { display: none; flex-direction: column; height: 100%; position: relative; }
   #chat header { border-bottom: none; background: linear-gradient(to bottom, rgba(0,0,0,1) 0%, rgba(0,0,0,0) 100%); position: absolute; width: 100%; top: 0; }
   #chat-log { flex: 1; overflow-y: auto; padding: 80px 20px 20px; display: flex; flex-direction: column; gap: 20px; }
-  .msg { max-width: 85%; font-size: 16px; line-height: 1.5; white-space: pre-wrap; }
-  .msg.user { align-self: flex-end; background: var(--bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; }
+  
+  .msg { max-width: 85%; font-size: 16px; line-height: 1.5; }
+  .msg.user { align-self: flex-end; background: var(--bubble); padding: 12px 18px; border-radius: 20px 20px 4px 20px; white-space: pre-wrap; }
   .msg.bot { align-self: flex-start; padding: 4px 0; }
+  
+  /* Markdown Styles */
+  .msg.bot pre { background: #111; border: 1px solid #333; border-radius: 8px; padding: 12px; overflow-x: auto; margin: 8px 0; font-family: monospace; font-size: 14px; }
+  .msg.bot code { background: #222; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.9em; }
+  .msg.bot pre code { background: none; padding: 0; }
+  .msg.bot p { margin: 0 0 12px 0; }
+  .msg.bot strong { color: #fff; font-weight: 600; }
+  
   .thoughts { align-self: flex-start; max-width: 85%; background: var(--surf); border: 1px solid var(--bord); border-radius: 12px; margin-bottom: 4px; font-size: 13px; }
   .thoughts summary { padding: 10px 14px; cursor: pointer; color: var(--dim); font-weight: 500; list-style: none; display: flex; align-items: center; gap: 8px; outline: none; }
   .thoughts summary::-webkit-details-marker { display: none; }
@@ -91,10 +101,12 @@ const HTML = `<!doctype html>
   .thoughts[open] summary:before { transform: rotate(90deg); }
   .thoughts .content { padding: 0 14px 14px; font-family: monospace; color: var(--dim); border-top: 1px solid var(--bord); margin-top: 4px; padding-top: 10px; }
   .thoughts .content div { margin-bottom: 6px; }
+  
   #chat-bar { padding: 12px 20px calc(env(safe-area-inset-bottom) + 12px); background: rgba(0,0,0,0.8); border-top: 1px solid var(--bord); display: flex; gap: 12px; align-items: flex-end; }
   #chat-input { flex: 1; background: var(--surf); color: var(--txt); border: 1px solid var(--bord); border-radius: 24px; padding: 12px 18px; font: inherit; font-size: 16px; resize: none; max-height: 120px; outline: none; }
   #chat-send { background: var(--txt); color: var(--bg); border: none; border-radius: 50%; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; font-size: 20px; flex-shrink: 0; cursor: pointer; }
   #chat-send:disabled { opacity: 0.3; }
+  
   .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 100; align-items: center; justify-content: center; padding: 20px; }
   .modal-box { background: var(--surf); border: 1px solid var(--bord); border-radius: 16px; padding: 24px; width: 100%; max-width: 400px; }
   .modal-box h2 { margin: 0 0 8px 0; font-size: 20px; }
@@ -155,6 +167,16 @@ const HTML = `<!doctype html>
 var currentBot = null;
 var pollInterval = null;
 
+// THE MARKDOWN PARSER
+function md(text) {
+  if (!text) return '';
+  let s = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  s = s.replace(/```([\s\S]*?)```/g, '<pre><code>$1</code></pre>');
+  s = s.replace(/`([^`\n]+)`/g, '<code>$1</code>');
+  s = s.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>');
+  return s;
+}
+
 function api(url, opts) {
   return fetch(url, opts).then(function(r) { return r.json(); });
 }
@@ -211,7 +233,13 @@ function loadLog(startPolling) {
       var m = data.messages[i];
       var el = document.createElement('div');
       el.className = 'msg ' + (m.role === 'assistant' ? 'bot' : m.role);
-      el.textContent = m.content;
+      
+      if (m.role === 'assistant') {
+        el.innerHTML = md(m.content); // Render markdown for bot
+      } else {
+        el.textContent = m.content; // Plain text for user
+      }
+      
       log.appendChild(el);
     }
 
@@ -276,6 +304,9 @@ function resetApp() { if (!confirm("Reset?")) return; fetch('/api/reset').then(f
 function closeModal(id) { document.getElementById(id).style.display = 'none'; }
 
 loadBots();
+</script>
+</body>
+</html>`;
 </script>
 </body>
 </html>`;
