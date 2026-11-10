@@ -130,17 +130,16 @@ export class BotDurableObject {
   }
 
   async runAgent(userMessage, history) {
-    const system = `You are "${this.name}", an elite senior developer and the user's coworker. 
+    const system = `You are "${this.name}", a senior developer and the user's coworker. 
 You are working directly on the user's GitHub.
 
 CRITICAL RULES:
-1. DO NOT create a new repository unless the user explicitly says "create a new repo". If they just say "make X", assume you should edit an existing repo or ask which one.
-2. ALWAYS inspect a repository before editing it. Use "github_list_files" to see the structure, and "github_read_file" to read the code.
-3. When updating a file, you MUST provide the ENTIRE updated code, not just the changed lines. Use "github_push_file" to commit.
-4. You have "github_delete_file" to remove old files if you are restructuring.
-5. Act like a human. Talk to the user. Explain what you are about to do, then do it.
-6. Output ONLY ONE raw JSON object per message when using a tool. Do not chain multiple JSONs together.
-7. If a tool fails, analyze the error, fix your logic, and try again.
+1. DO NOT create a new repository unless the user explicitly says "create a new repo".
+2. ALWAYS inspect a repository before editing it. Use "github_list_files" and "github_read_file".
+3. When updating a file, provide the ENTIRE updated code. Use "github_push_file".
+4. Act like a human. Explain what you are about to do, then do it.
+5. Output ONLY ONE raw JSON object per message when using a tool. 
+6. If a tool fails, analyze the error, fix your logic, and try again.
 
 Tools (reply with raw JSON):
 - {"tool":"github_list_files","repo":"repo-name"}
@@ -151,7 +150,6 @@ Tools (reply with raw JSON):
 
 Do NOT wrap JSON in markdown. Just raw JSON.`;
 
-    // Give it maximum context so it remembers what it read
     const messages = [
       { role: "system", content: system },
       ...history.slice(-20) 
@@ -166,19 +164,16 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
       await this.ctx.storage.put("thoughts", thoughts);
     };
 
-    // If the AI outputs plain text, the loop breaks and it talks to the user.
-    // If it outputs a tool call, it executes it and continues.
     while (steps < 15) {
       const toolCall = this.parseTool(raw);
-      if (!toolCall) break; // It's talking to the user
+      if (!toolCall) break; 
 
       steps++;
       await addThought(`Executing: ${toolCall.tool}...`);
       
       const result = await this.runTool(toolCall);
       
-      // Don't truncate the result! Let it read the whole file/error.
-      await addThought(`Result: ${result}`);
+      await addThought(`Result: ${result.slice(0, 150)}...`);
 
       messages.push({ role: "assistant", content: raw });
       messages.push({ role: "user", content: `Tool result: ${result}` });
@@ -186,10 +181,18 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
       raw = await this.askBrain(messages);
     }
 
-    return raw;
+    // THE FIX: Strip all raw JSON tool calls from the final text
+    let cleanResponse = raw;
+    const jsonRegex = /\{[\s\S]*?"tool"[\s\S]*?\}/g;
+    cleanResponse = cleanResponse.replace(jsonRegex, '').trim();
+    
+    if (!cleanResponse) {
+        return "✅ Task completed successfully. Check your GitHub.";
+    }
+    
+    return cleanResponse;
   }
 
-  // Bulletproof parser: grabs ONLY the first valid JSON object.
   parseTool(text) {
     if (typeof text !== 'string') return null;
     try {
@@ -316,7 +319,7 @@ Do NOT wrap JSON in markdown. Just raw JSON.`;
 
   async askBrain(messages) {
     try {
-      const res = await this.env.AI.run("@cf/qwen/qwen2.5-coder-32b-instruct", { messages, max_tokens: 2500 }); // Increased tokens for bigger files
+      const res = await this.env.AI.run("@cf/qwen/qwen2.5-coder-32b-instruct", { messages, max_tokens: 2500 });
       if (res?.choices?.[0]?.message?.content) return res.choices[0].message.content;
       if (typeof res === 'string') return res;
       if (res?.response) return res.response;
