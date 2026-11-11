@@ -21,7 +21,7 @@ export class BotDurableObject {
       let reg = (await this.ctx.storage.get("registry")) || [];
       if (!Array.isArray(reg)) reg = [];
       if (reg.length === 0) {
-        const defaults = [{ name: "chief", instructions: "You are the Chief. You manage a team of AI agents." }];
+        const defaults = [{ name: "chief", instructions: "You are the Chief Manager. You do not write code. You spawn workers and delegate tasks." }];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
           await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify(bot) }));
@@ -121,49 +121,63 @@ export class BotDurableObject {
   }
 
   async runAgent(userMessage, history) {
+    // THE MANAGER PROMPT
     const system = `You are "${this.name}".
 ${this.instructions}
 
-You are an autonomous agent. 
-If the user is just chatting or asking a simple question, reply with normal text. DO NOT use tools.
-If the user asks you to build something complex or do a big task, you can spawn specialist agents to help you.
+You are an autonomous agent acting as a Manager.
+If the user is chatting, just reply.
+If the user asks you to build something complex, you MUST use your tools to delegate the work to sub-agents.
+
+CRITICAL RULES:
+1. YOU DO NOT WRITE CODE YOURSELF. You are the Manager.
+2. Spawn agents using "spawn_agent" (e.g., spawn a "coder" and a "tester").
+3. Assign them work using "delegate_task".
+4. Once delegated, check their status using "check_agent_status" until they finish.
 
 Tools (reply with raw JSON):
 - {"tool":"chat","text":"your normal reply"}
+- {"tool":"spawn_agent","name":"agent_name","instructions":"what they do"}
+- {"tool":"delegate_task","name":"agent_name","task":"detailed instructions for the work"}
+- {"tool":"check_agent_status","name":"agent_name"}
 - {"tool":"github_list_files","repo":"name"}
 - {"tool":"github_read_file","repo":"name","path":"file"}
 - {"tool":"github_push_file","repo":"name","path":"file","content":"code","message":"msg"}
 - {"tool":"github_delete_file","repo":"name","path":"file","message":"msg"}
 - {"tool":"github_create_repo","name":"name","description":"desc"}
-- {"tool":"spawn_agent","name":"agent_name","instructions":"what they do"}
-- {"tool":"delegate_task","name":"agent_name","task":"what to do"}
 
 Do NOT wrap JSON in markdown.`;
 
     const messages = [ { role: "system", content: system }, ...history.slice(-15) ];
 
     let raw = await this.askBrain(messages);
-    let steps = 0;
     let thoughts = ["Analyzing..."];
+    let consecutiveTicks = 0;
 
     const addThought = async (txt) => {
       thoughts.push(txt);
-      await this.ctx.storage.put("thoughts", thoughts);
+      await this.ctx.storage.put("thoughts", thoughts.slice(-10));
     };
 
-    // INCREASED LIMIT FOR CONTINUOUS WORK
-    while (steps < 30) {
+    // NO STEP LIMIT
+    while (true) {
       const toolCall = this.parseTool(raw);
+      
+      // If no tool call, it's a normal chat message. Return it.
       if (!toolCall) {
-        // If no tool call, just return the text
         return raw;
       }
-      
+
       if (toolCall.tool === "chat") {
         return toolCall.text;
       }
 
-      steps++;
+      // Prevent infinite loops if it gets stuck
+      consecutiveTicks++;
+      if (consecutiveTicks > 50) {
+        return "I got stuck in a loop. Please try breaking the task into smaller pieces.";
+      }
+
       await addThought(`Using ${toolCall.tool}...`);
       const result = await this.runTool(toolCall);
       await addThought(`Result: ${result.slice(0, 100)}...`);
@@ -177,10 +191,6 @@ Do NOT wrap JSON in markdown.`;
 
       raw = await this.askBrain(messages);
     }
-
-    let cleanResponse = raw.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim();
-    if (!cleanResponse) return "✅ Task completed. Check your GitHub.";
-    return cleanResponse;
   }
 
   parseTool(text) {
@@ -217,8 +227,16 @@ Do NOT wrap JSON in markdown.`;
 
     if (tool === "delegate_task") {
       const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
-      const res = await stub.fetch(new Request("https://bot/message", { method: "POST", body: JSON.stringify({ message: args.task }) }));
+      // Fire and forget the message to the worker
+      await stub.fetch(new Request("https://bot/message", { method: "POST", body: JSON.stringify({ message: args.task }) }));
       return `Task delegated to ${args.name}. They are working on it.`;
+    }
+
+    if (tool === "check_agent_status") {
+      const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
+      const res = await stub.fetch(new Request("https://bot/messages"));
+      const data = await res.json();
+      return `Status of ${args.name}: ${data.status}. Last message: ${data.messages[data.messages.length-1]?.content || 'none'}`;
     }
 
     if (tool.includes("github_")) {
