@@ -95,6 +95,7 @@ export class BotDurableObject {
     return new Response("not found", { status: 404 });
   }
 
+  // THIS RUNS IN THE BACKGROUND, SURVIVING CLOUDFLARE TIMEOUTS
   async alarm() {
     const status = await this.ctx.storage.get("status");
     if (status !== "working") return;
@@ -104,28 +105,55 @@ export class BotDurableObject {
       const lastMsg = history.filter(m => m.role === "user").pop();
       if (!lastMsg) throw new Error("No message.");
 
-      let reply = await this.runAgent(lastMsg.content, history);
+      const reply = await this.runAgent(lastMsg.content, history);
       
-      // SAFETY: Strip any leaked JSON from the final response
-      reply = reply.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim();
-      if (!reply) reply = "✅ Task completed.";
+      // If reply is null, it means we are waiting for a worker (alarm was rescheduled)
+      if (reply === null) return;
 
       const newHistory = (await this.ctx.storage.get("history")) || [];
       newHistory.push({ role: "assistant", content: reply, ts: Date.now() });
       await this.ctx.storage.put("history", newHistory.slice(-100));
+      await this.ctx.storage.put("status", "idle");
+      await this.ctx.storage.delete("thoughts");
 
     } catch (e) {
       const newHistory = (await this.ctx.storage.get("history")) || [];
       newHistory.push({ role: "assistant", content: "Error: " + e.message, ts: Date.now() });
       await this.ctx.storage.put("history", newHistory.slice(-100));
-    } finally {
       await this.ctx.storage.put("status", "idle");
-      await this.ctx.storage.delete("thoughts");
     }
   }
 
   async runAgent(userMessage, history) {
     const isManager = this.name === "chief";
+    
+    // Check if we are waking up from a sleep to check a worker
+    const pendingWorker = await this.ctx.storage.get("pending_worker");
+    
+    if (pendingWorker) {
+      // Check status of the worker we are waiting for
+      const stub = this.env.BOT.get(this.env.BOT.idFromName(pendingWorker));
+      const res = await stub.fetch(new Request("https://bot/messages"));
+      const data = await res.json();
+      
+      await this.addThought(`Checking status of ${pendingWorker}: ${data.status}`);
+      
+      if (data.status === "idle") {
+        // Worker is done!
+        const workerReply = data.messages[data.messages.length-1].content;
+        await this.ctx.storage.delete("pending_worker");
+        
+        const newHistory = (await this.ctx.storage.get("history")) || [];
+        newHistory.push({ role: "system", content: `${pendingWorker} replied: ${workerReply}`, ts: Date.now() });
+        await this.ctx.storage.put("history", newHistory.slice(-100));
+        
+        // Return to normal loop
+      } else {
+        // Worker is still working. Sleep for 10 seconds and check again.
+        await this.ctx.storage.setAlarm(Date.now() + 10000);
+        return null; 
+      }
+    }
 
     const system = `You are "${this.name}".
 ${this.instructions}
@@ -147,17 +175,16 @@ When you have completed the task, use the "finish" tool to report back.
 
 CRITICAL RULES:
 1. DO NOT CREATE A NEW REPO unless explicitly asked.
-2. YOU CANNOT COMPILE BINARIES (.ipa, .exe, .app). If asked, write the source code and a GitHub Action (.github/workflows/build.yml) to compile it. Tell the user to check the "Actions" tab on GitHub to download the compiled file.
+2. YOU CANNOT COMPILE BINARIES (.ipa, .exe). If asked, write the source code and a GitHub Action (.github/workflows/build.yml) to compile it. Tell the user to check the "Actions" tab.
 3. NEVER hallucinate file content. Write real code.
-4. If you want to talk to the user, use the "chat" tool. Do not output raw text.
+4. If you want to talk to the user, use the "chat" tool.
 5. When you are completely finished, use the "finish" tool.
 
 Tools (reply with raw JSON):
 - {"tool":"chat","text":"your normal reply"}
-- {"tool":"finish","report":"Final summary of what you accomplished"}
+- {"tool":"finish","report":"Final summary"}
 - {"tool":"spawn_agent","name":"coder","instructions":"You are a senior coder."}
 - {"tool":"delegate_task","name":"coder","task":"the task"}
-- {"tool":"check_agent_status","name":"coder"}
 - {"tool":"github_list_files","repo":"name"}
 - {"tool":"github_read_file","repo":"name","path":"file"}
 - {"tool":"github_push_file","repo":"name","path":"file","content":"code","message":"msg"}
@@ -168,18 +195,11 @@ Do NOT wrap JSON in markdown.`;
     const messages = [ { role: "system", content: system }, ...history.slice(-15) ];
 
     let raw = await this.askBrain(messages);
-    let thoughts = ["Analyzing..."];
-
-    const addThought = async (txt) => {
-      thoughts.push(txt);
-      await this.ctx.storage.put("thoughts", thoughts.slice(-10));
-    };
 
     while (true) {
       const parsed = this.extractJSON(raw);
       
       if (!parsed) {
-        // If no tool call, return the text (cleaned)
         return raw;
       }
 
@@ -192,9 +212,16 @@ Do NOT wrap JSON in markdown.`;
         return toolCall.text;
       }
 
-      await addThought(`Using ${toolCall.tool}...`);
+      await this.addThought(`Using ${toolCall.tool}...`);
       const result = await this.runTool(toolCall);
-      await addThought(`Result: ${result.slice(0, 100)}...`);
+      await this.addThought(`Result: ${result.slice(0, 100)}...`);
+
+      // INTERCEPT: If we just delegated a task, go to sleep!
+      if (toolCall.tool === "delegate_task") {
+        await this.ctx.storage.put("pending_worker", toolCall.name);
+        await this.ctx.storage.setAlarm(Date.now() + 10000);
+        return null; // Tells the alarm function we are sleeping
+      }
       
       if (result.includes("GITHUB_TOKEN is not set") && toolCall.tool.includes("github_")) {
         return "Please tap the ⚙ gear icon and add your GitHub token.";
@@ -205,6 +232,12 @@ Do NOT wrap JSON in markdown.`;
 
       raw = await this.askBrain(messages);
     }
+  }
+
+  async addThought(txt) {
+    let thoughts = (await this.ctx.storage.get("thoughts")) || [];
+    thoughts.push(txt);
+    await this.ctx.storage.put("thoughts", thoughts.slice(-10));
   }
 
   extractJSON(text) {
@@ -230,7 +263,7 @@ Do NOT wrap JSON in markdown.`;
             try {
               let json = JSON.parse(text.substring(firstBrace, i + 1));
               if (json && json.tool) {
-                return { json: json, remainder: text.substring(i + 1) };
+                return { json: json };
               }
             } catch (e) {}
             return null;
@@ -263,14 +296,7 @@ Do NOT wrap JSON in markdown.`;
     if (tool === "delegate_task") {
       const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
       await stub.fetch(new Request("https://bot/message", { method: "POST", body: JSON.stringify({ message: args.task }) }));
-      return `Task delegated to ${args.name}. They are working on it.`;
-    }
-
-    if (tool === "check_agent_status") {
-      const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
-      const res = await stub.fetch(new Request("https://bot/messages"));
-      const data = await res.json();
-      return `Status of ${args.name}: ${data.status}. Last message: ${data.messages[data.messages.length-1]?.content || 'none'}`;
+      return `Task delegated to ${args.name}.`;
     }
 
     if (tool.includes("github_")) {
