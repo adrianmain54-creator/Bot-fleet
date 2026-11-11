@@ -143,6 +143,8 @@ Do NOT wrap JSON in markdown.`;
     const messages = [ { role: "system", content: system }, ...history.slice(-15) ];
 
     let raw = await this.askBrain(messages);
+    if (typeof raw !== 'string') raw = "I experienced an error.";
+
     let steps = 0;
     let thoughts = ["Analyzing..."];
 
@@ -172,6 +174,11 @@ Do NOT wrap JSON in markdown.`;
          raw = "I experienced an internal error.";
          break;
       }
+    }
+
+    // THE FIX: Safeguard against undefined/null before replacing
+    if (typeof raw !== 'string') {
+      raw = "Task completed or unknown error occurred.";
     }
 
     let cleanResponse = raw.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim();
@@ -274,7 +281,7 @@ Do NOT wrap JSON in markdown.`;
       if (res?.choices?.[0]?.message?.content) return res.choices[0].message.content;
       if (typeof res === 'string') return res;
       if (res?.response) return res.response;
-      return JSON.stringify(res);
+      return JSON.stringify(res) || "Empty response";
     } catch (e) { return "Brain Error: " + e.message; }
   }
 }
