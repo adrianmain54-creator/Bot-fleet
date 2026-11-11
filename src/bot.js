@@ -121,25 +121,37 @@ export class BotDurableObject {
   }
 
   async runAgent(userMessage, history) {
-    // THE STRICT MANAGER PROMPT
+    const isManager = this.name === "chief";
+
     const system = `You are "${this.name}".
 ${this.instructions}
 
-You are a senior engineering manager leading a team of AI agents. 
-You DO NOT write code yourself. You spawn agents and delegate tasks to them.
+${isManager ? `
+YOU ARE THE MANAGER. 
+DO NOT WRITE CODE. 
+When given a task, you MUST:
+1. Spawn a "coder" agent if you haven't already (use spawn_agent).
+2. Delegate the task to the coder (use delegate_task).
+3. Wait for the coder to finish (use check_agent_status).
+4. When the coder says they are done, reply to the user using the "finish" tool.
+` : `
+YOU ARE THE WORKER.
+Your job is to actually do the work.
+Use the github tools to read and write files.
+When you have completed the task, use the "finish" tool to report back to the Chief.
+`}
 
 CRITICAL RULES:
-1. YOU CANNOT COMPILE .IPA FILES. You are on a Linux server. If a user asks for an .ipa, you must write the Swift code and a GitHub Actions workflow (build.yml) to compile it.
-2. Do not hallucinate file content. Only push real code.
-3. If the user asks for a complex project, spawn a 'coder' and a 'reviewer' agent. Delegate the coding to the coder.
-4. When talking to the user, use the "chat" tool.
-5. Output ONLY ONE JSON object per message. Do not combine multiple JSONs into one response.
+1. DO NOT CREATE A NEW REPO unless explicitly asked. Use the existing repo provided in the prompt.
+2. YOU CANNOT COMPILE BINARIES (.ipa, .exe). If asked, write Swift/C++ code and a GitHub Action (build.yml) to compile it.
+3. NEVER hallucinate file content. Write real code.
+4. DO NOT stop until you call the "finish" tool.
 
 Tools (reply with raw JSON):
-- {"tool":"chat","text":"your normal reply"}
-- {"tool":"spawn_agent","name":"agent_name","instructions":"what they do"}
-- {"tool":"delegate_task","name":"agent_name","task":"detailed instructions"}
-- {"tool":"message_bot","target":"agent_name","message":"question or update"}
+- {"tool":"finish","report":"Final message to the user"}
+- {"tool":"spawn_agent","name":"coder","instructions":"You are a senior coder."}
+- {"tool":"delegate_task","name":"coder","task":"the task"}
+- {"tool":"check_agent_status","name":"coder"}
 - {"tool":"github_list_files","repo":"name"}
 - {"tool":"github_read_file","repo":"name","path":"file"}
 - {"tool":"github_push_file","repo":"name","path":"file","content":"code","message":"msg"}
@@ -157,20 +169,19 @@ Do NOT wrap JSON in markdown.`;
       await this.ctx.storage.put("thoughts", thoughts.slice(-10));
     };
 
-    // NO STEP LIMIT
+    // NONSTOP WORKER LOOP
     while (true) {
       const parsed = this.extractJSON(raw);
       
       if (!parsed) {
-        // If no JSON found, just return the text
+        // If no tool call, it failed to format. Force it to finish.
         return raw;
       }
 
       const toolCall = parsed.json;
-      let remainder = parsed.remainder;
 
-      if (toolCall.tool === "chat") {
-        return toolCall.text;
+      if (toolCall.tool === "finish") {
+        return toolCall.report;
       }
 
       await addThought(`Using ${toolCall.tool}...`);
@@ -248,10 +259,11 @@ Do NOT wrap JSON in markdown.`;
       return `Task delegated to ${args.name}. They are working on it.`;
     }
 
-    if (tool === "message_bot") {
-      const stub = this.env.BOT.get(this.env.BOT.idFromName(args.target));
-      await stub.fetch(new Request("https://bot/message", { method: "POST", body: JSON.stringify({ message: args.message }) }));
-      return `Message sent to ${args.target}.`;
+    if (tool === "check_agent_status") {
+      const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
+      const res = await stub.fetch(new Request("https://bot/messages"));
+      const data = await res.json();
+      return `Status of ${args.name}: ${data.status}. Last message: ${data.messages[data.messages.length-1]?.content || 'none'}`;
     }
 
     if (tool.includes("github_")) {
