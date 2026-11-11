@@ -104,8 +104,12 @@ export class BotDurableObject {
       const lastMsg = history.filter(m => m.role === "user").pop();
       if (!lastMsg) throw new Error("No message.");
 
-      const reply = await this.runAgent(lastMsg.content, history);
+      let reply = await this.runAgent(lastMsg.content, history);
       
+      // SAFETY: Strip any leaked JSON from the final response
+      reply = reply.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim();
+      if (!reply) reply = "✅ Task completed.";
+
       const newHistory = (await this.ctx.storage.get("history")) || [];
       newHistory.push({ role: "assistant", content: reply, ts: Date.now() });
       await this.ctx.storage.put("history", newHistory.slice(-100));
@@ -130,25 +134,27 @@ ${isManager ? `
 YOU ARE THE MANAGER. 
 DO NOT WRITE CODE. 
 When given a task, you MUST:
-1. Spawn a "coder" agent if you haven't already (use spawn_agent).
-2. Delegate the task to the coder (use delegate_task).
-3. Wait for the coder to finish (use check_agent_status).
-4. When the coder says they are done, reply to the user using the "finish" tool.
+1. Spawn a "coder" agent if you haven't already.
+2. Delegate the task to the coder.
+3. Wait for the coder to finish.
+4. When done, reply to the user using the "finish" tool.
 ` : `
 YOU ARE THE WORKER.
 Your job is to actually do the work.
 Use the github tools to read and write files.
-When you have completed the task, use the "finish" tool to report back to the Chief.
+When you have completed the task, use the "finish" tool to report back.
 `}
 
 CRITICAL RULES:
-1. DO NOT CREATE A NEW REPO unless explicitly asked. Use the existing repo provided in the prompt.
-2. YOU CANNOT COMPILE BINARIES (.ipa, .exe). If asked, write Swift/C++ code and a GitHub Action (build.yml) to compile it.
+1. DO NOT CREATE A NEW REPO unless explicitly asked.
+2. YOU CANNOT COMPILE BINARIES (.ipa, .exe, .app). If asked, write the source code and a GitHub Action (.github/workflows/build.yml) to compile it. Tell the user to check the "Actions" tab on GitHub to download the compiled file.
 3. NEVER hallucinate file content. Write real code.
-4. DO NOT stop until you call the "finish" tool.
+4. If you want to talk to the user, use the "chat" tool. Do not output raw text.
+5. When you are completely finished, use the "finish" tool.
 
 Tools (reply with raw JSON):
-- {"tool":"finish","report":"Final message to the user"}
+- {"tool":"chat","text":"your normal reply"}
+- {"tool":"finish","report":"Final summary of what you accomplished"}
 - {"tool":"spawn_agent","name":"coder","instructions":"You are a senior coder."}
 - {"tool":"delegate_task","name":"coder","task":"the task"}
 - {"tool":"check_agent_status","name":"coder"}
@@ -169,12 +175,11 @@ Do NOT wrap JSON in markdown.`;
       await this.ctx.storage.put("thoughts", thoughts.slice(-10));
     };
 
-    // NONSTOP WORKER LOOP
     while (true) {
       const parsed = this.extractJSON(raw);
       
       if (!parsed) {
-        // If no tool call, it failed to format. Force it to finish.
+        // If no tool call, return the text (cleaned)
         return raw;
       }
 
@@ -182,6 +187,9 @@ Do NOT wrap JSON in markdown.`;
 
       if (toolCall.tool === "finish") {
         return toolCall.report;
+      }
+      if (toolCall.tool === "chat") {
+        return toolCall.text;
       }
 
       await addThought(`Using ${toolCall.tool}...`);
@@ -199,7 +207,6 @@ Do NOT wrap JSON in markdown.`;
     }
   }
 
-  // Robust JSON extractor: grabs ONLY the first valid JSON object
   extractJSON(text) {
     if (typeof text !== 'string') return null;
     let firstBrace = text.indexOf('{');
