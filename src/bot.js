@@ -143,8 +143,6 @@ Do NOT wrap JSON in markdown.`;
     const messages = [ { role: "system", content: system }, ...history.slice(-15) ];
 
     let raw = await this.askBrain(messages);
-    if (typeof raw !== 'string') raw = "I experienced an error.";
-
     let steps = 0;
     let thoughts = ["Analyzing..."];
 
@@ -170,15 +168,6 @@ Do NOT wrap JSON in markdown.`;
       messages.push({ role: "user", content: `Tool result: ${result}` });
 
       raw = await this.askBrain(messages);
-      if (!raw || typeof raw !== 'string') {
-         raw = "I experienced an internal error.";
-         break;
-      }
-    }
-
-    // THE FIX: Safeguard against undefined/null before replacing
-    if (typeof raw !== 'string') {
-      raw = "Task completed or unknown error occurred.";
     }
 
     let cleanResponse = raw.replace(/\{[\s\S]*?"tool"[\s\S]*?\}/g, '').trim();
@@ -277,11 +266,18 @@ Do NOT wrap JSON in markdown.`;
 
   async askBrain(messages) {
     try {
-      const res = await this.env.AI.run("@cf/qwen/qwen2.5-coder-32b-instruct", { messages, max_tokens: 2500 });
-      if (res?.choices?.[0]?.message?.content) return res.choices[0].message.content;
-      if (typeof res === 'string') return res;
-      if (res?.response) return res.response;
-      return JSON.stringify(res) || "Empty response";
-    } catch (e) { return "Brain Error: " + e.message; }
+      // SWAPPED TO THE MOST RELIABLE LLAMA 3.3 70B MODEL
+      const res = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages, max_tokens: 2500 });
+      
+      let out = "";
+      if (res && typeof res.response === 'string') out = res.response;
+      else if (res && res.choices && res.choices[0] && res.choices[0].message) out = res.choices[0].message.content;
+      else if (typeof res === 'string') out = res;
+      else out = JSON.stringify(res);
+      
+      return out || "Empty response from AI.";
+    } catch (e) { 
+      return "Brain Error: " + e.message; 
+    }
   }
 }
