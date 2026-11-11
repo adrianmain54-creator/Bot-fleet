@@ -10,15 +10,12 @@ export class BotDurableObject {
     const url = new URL(request.url);
     const path = url.pathname;
 
-    // Load name and instructions on every request to survive cold starts
     if (!this.name) {
       this.name = (await this.ctx.storage.get("name")) || "unnamed";
       this.instructions = (await this.ctx.storage.get("instructions")) || "You are a helpful autonomous developer.";
     }
 
-    if (path === "/list") {
-      return Response.json((await this.ctx.storage.get("registry")) || []);
-    }
+    if (path === "/list") { return Response.json((await this.ctx.storage.get("registry")) || []); }
 
     if (path === "/ensure_defaults") {
       let reg = (await this.ctx.storage.get("registry")) || [];
@@ -84,14 +81,12 @@ export class BotDurableObject {
 
     if (path === "/message" && request.method === "POST") {
       const { message } = await request.json();
-      
       const history = (await this.ctx.storage.get("history")) || [];
       history.push({ role: "user", content: message, ts: Date.now() });
       await this.ctx.storage.put("history", history.slice(-100));
       
       await this.ctx.storage.put("status", "working");
       await this.ctx.storage.put("thoughts", ["Reading workspace..."]);
-      
       await this.ctx.storage.setAlarm(Date.now() + 100);
       
       return Response.json({ ok: true, status: "working" });
@@ -145,10 +140,7 @@ Tools (reply with raw JSON):
 
 Do NOT wrap JSON in markdown.`;
 
-    const messages = [
-      { role: "system", content: system },
-      ...history.slice(-15)
-    ];
+    const messages = [ { role: "system", content: system }, ...history.slice(-15) ];
 
     let raw = await this.askBrain(messages);
     let steps = 0;
@@ -164,8 +156,7 @@ Do NOT wrap JSON in markdown.`;
       if (!toolCall) break; 
       
       steps++;
-      await addThought(`Step ${steps}: Using ${toolCall.tool}...`);
-      
+      await addThought(`Using ${toolCall.tool}...`);
       const result = await this.runTool(toolCall);
       await addThought(`Result: ${result.slice(0, 100)}...`);
       
@@ -192,9 +183,7 @@ Do NOT wrap JSON in markdown.`;
     if (typeof text !== 'string') return null;
     try {
       let clean = text.trim();
-      if (clean.startsWith('```')) {
-        clean = clean.replace(/^```[a-zA-Z]*\n/, '').replace(/```$/, '').trim();
-      }
+      if (clean.startsWith('```')) clean = clean.replace(/^```[a-zA-Z]*\n/, '').replace(/```$/, '').trim();
       const first = clean.indexOf('{'), last = clean.lastIndexOf('}');
       if (first !== -1 && last !== -1) clean = clean.substring(first, last + 1);
       const obj = JSON.parse(clean);
@@ -210,13 +199,8 @@ Do NOT wrap JSON in markdown.`;
     return (await res.json()).token;
   }
 
-  utf8ToBase64(str) {
-    return btoa(unescape(encodeURIComponent(str)));
-  }
-
-  base64ToUtf8(str) {
-    return decodeURIComponent(escape(atob(str)));
-  }
+  utf8ToBase64(str) { return btoa(unescape(encodeURIComponent(str))); }
+  base64ToUtf8(str) { return decodeURIComponent(escape(atob(str))); }
 
   async runTool({ tool, ...args }) {
     if (tool.includes("github_")) {
@@ -230,9 +214,7 @@ Do NOT wrap JSON in markdown.`;
       if (tool === "github_list_files") {
         try {
           let res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/git/trees/main?recursive=1`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-          if (!res.ok) {
-             res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/git/trees/master?recursive=1`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-          }
+          if (!res.ok) res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/git/trees/master?recursive=1`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
           if (!res.ok) return "GitHub error: " + (await res.text());
           const files = (await res.json()).tree.filter(item => item.type === "blob").map(item => item.path);
           return `Files in ${args.repo}:\n` + files.join("\n");
