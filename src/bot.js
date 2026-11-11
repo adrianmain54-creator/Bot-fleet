@@ -21,7 +21,7 @@ export class BotDurableObject {
       let reg = (await this.ctx.storage.get("registry")) || [];
       if (!Array.isArray(reg)) reg = [];
       if (reg.length === 0) {
-        const defaults = [{ name: "chief", instructions: "You are the Chief Manager. You do not write code. You spawn workers and delegate tasks." }];
+        const defaults = [{ name: "chief", instructions: "You are the Chief Manager of a software dev team. You do not write code. You delegate." }];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
           await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify(bot) }));
@@ -121,29 +121,28 @@ export class BotDurableObject {
   }
 
   async runAgent(userMessage, history) {
-    // THE MANAGER PROMPT
+    // THE STRICT MANAGER PROMPT
     const system = `You are "${this.name}".
 ${this.instructions}
 
-You are an autonomous agent acting as a Manager.
-If the user is chatting, just reply.
-If the user asks you to build something complex, you MUST use your tools to delegate the work to sub-agents.
+You are a senior engineering manager leading a team of AI agents. 
+You DO NOT write code yourself. You spawn agents and delegate tasks to them.
 
 CRITICAL RULES:
-1. YOU DO NOT WRITE CODE YOURSELF. You are the Manager.
-2. Spawn agents using "spawn_agent" (e.g., spawn a "coder" and a "tester").
-3. Assign them work using "delegate_task".
-4. Once delegated, check their status using "check_agent_status" until they finish.
+1. YOU CANNOT COMPILE .IPA FILES. You are on a Linux server. If a user asks for an .ipa, you must write the Swift code and a GitHub Actions workflow (build.yml) to compile it.
+2. Do not hallucinate file content. Only push real code.
+3. If the user asks for a complex project, spawn a 'coder' and a 'reviewer' agent. Delegate the coding to the coder.
+4. When talking to the user, use the "chat" tool.
+5. Output ONLY ONE JSON object per message. Do not combine multiple JSONs into one response.
 
 Tools (reply with raw JSON):
 - {"tool":"chat","text":"your normal reply"}
 - {"tool":"spawn_agent","name":"agent_name","instructions":"what they do"}
-- {"tool":"delegate_task","name":"agent_name","task":"detailed instructions for the work"}
-- {"tool":"check_agent_status","name":"agent_name"}
+- {"tool":"delegate_task","name":"agent_name","task":"detailed instructions"}
+- {"tool":"message_bot","target":"agent_name","message":"question or update"}
 - {"tool":"github_list_files","repo":"name"}
 - {"tool":"github_read_file","repo":"name","path":"file"}
 - {"tool":"github_push_file","repo":"name","path":"file","content":"code","message":"msg"}
-- {"tool":"github_delete_file","repo":"name","path":"file","message":"msg"}
 - {"tool":"github_create_repo","name":"name","description":"desc"}
 
 Do NOT wrap JSON in markdown.`;
@@ -152,7 +151,6 @@ Do NOT wrap JSON in markdown.`;
 
     let raw = await this.askBrain(messages);
     let thoughts = ["Analyzing..."];
-    let consecutiveTicks = 0;
 
     const addThought = async (txt) => {
       thoughts.push(txt);
@@ -161,21 +159,18 @@ Do NOT wrap JSON in markdown.`;
 
     // NO STEP LIMIT
     while (true) {
-      const toolCall = this.parseTool(raw);
+      const parsed = this.extractJSON(raw);
       
-      // If no tool call, it's a normal chat message. Return it.
-      if (!toolCall) {
+      if (!parsed) {
+        // If no JSON found, just return the text
         return raw;
       }
 
+      const toolCall = parsed.json;
+      let remainder = parsed.remainder;
+
       if (toolCall.tool === "chat") {
         return toolCall.text;
-      }
-
-      // Prevent infinite loops if it gets stuck
-      consecutiveTicks++;
-      if (consecutiveTicks > 50) {
-        return "I got stuck in a loop. Please try breaking the task into smaller pieces.";
       }
 
       await addThought(`Using ${toolCall.tool}...`);
@@ -193,16 +188,38 @@ Do NOT wrap JSON in markdown.`;
     }
   }
 
-  parseTool(text) {
+  // Robust JSON extractor: grabs ONLY the first valid JSON object
+  extractJSON(text) {
     if (typeof text !== 'string') return null;
-    try {
-      let clean = text.trim();
-      if (clean.startsWith('```')) clean = clean.replace(/^```[a-zA-Z]*\n/, '').replace(/```$/, '').trim();
-      const first = clean.indexOf('{'), last = clean.lastIndexOf('}');
-      if (first !== -1 && last !== -1) clean = clean.substring(first, last + 1);
-      const obj = JSON.parse(clean);
-      if (obj && obj.tool) return obj;
-    } catch (e) {}
+    let firstBrace = text.indexOf('{');
+    if (firstBrace === -1) return null;
+    
+    let braceCount = 0;
+    let inString = false;
+    let escapeNext = false;
+    
+    for (let i = firstBrace; i < text.length; i++) {
+      let char = text[i];
+      if (escapeNext) { escapeNext = false; continue; }
+      if (char === '\\') { escapeNext = true; continue; }
+      if (char === '"') { inString = !inString; continue; }
+      
+      if (!inString) {
+        if (char === '{') braceCount++;
+        if (char === '}') {
+          braceCount--;
+          if (braceCount === 0) {
+            try {
+              let json = JSON.parse(text.substring(firstBrace, i + 1));
+              if (json && json.tool) {
+                return { json: json, remainder: text.substring(i + 1) };
+              }
+            } catch (e) {}
+            return null;
+          }
+        }
+      }
+    }
     return null;
   }
 
@@ -227,16 +244,14 @@ Do NOT wrap JSON in markdown.`;
 
     if (tool === "delegate_task") {
       const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
-      // Fire and forget the message to the worker
       await stub.fetch(new Request("https://bot/message", { method: "POST", body: JSON.stringify({ message: args.task }) }));
       return `Task delegated to ${args.name}. They are working on it.`;
     }
 
-    if (tool === "check_agent_status") {
-      const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
-      const res = await stub.fetch(new Request("https://bot/messages"));
-      const data = await res.json();
-      return `Status of ${args.name}: ${data.status}. Last message: ${data.messages[data.messages.length-1]?.content || 'none'}`;
+    if (tool === "message_bot") {
+      const stub = this.env.BOT.get(this.env.BOT.idFromName(args.target));
+      await stub.fetch(new Request("https://bot/message", { method: "POST", body: JSON.stringify({ message: args.message }) }));
+      return `Message sent to ${args.target}.`;
     }
 
     if (tool.includes("github_")) {
@@ -276,19 +291,6 @@ Do NOT wrap JSON in markdown.`;
           const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, { method: "PUT", headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet", "content-type": "application/json" }, body: JSON.stringify(body) });
           if (!res.ok) return "GitHub error: " + (await res.text());
           return `File ${args.path} pushed.`;
-        } catch (e) { return "failed"; }
-      }
-
-      if (tool === "github_delete_file") {
-        if (!args.repo || !args.path) return "Error: Missing repo or path.";
-        try {
-          const checkRes = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, { headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet" } });
-          if (!checkRes.ok) return "File not found.";
-          const sha = (await checkRes.json()).sha;
-          const body = { message: args.message || "Delete", sha: sha };
-          const res = await fetch(`https://api.github.com/repos/${user.login}/${args.repo}/contents/${args.path}`, { method: "DELETE", headers: { "authorization": "Bearer " + token, "user-agent": "BotFleet", "content-type": "application/json" }, body: JSON.stringify(body) });
-          if (!res.ok) return "GitHub error: " + (await res.text());
-          return `File ${args.path} deleted.`;
         } catch (e) { return "failed"; }
       }
 
