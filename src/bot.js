@@ -12,7 +12,7 @@ export class BotDurableObject {
 
     if (!this.name) {
       this.name = (await this.ctx.storage.get("name")) || "unnamed";
-      this.instructions = (await this.ctx.storage.get("instructions")) || "You are a helpful autonomous developer.";
+      this.instructions = (await this.ctx.storage.get("instructions")) || "You are a helpful AI.";
     }
 
     if (path === "/list") { return Response.json((await this.ctx.storage.get("registry")) || []); }
@@ -21,7 +21,7 @@ export class BotDurableObject {
       let reg = (await this.ctx.storage.get("registry")) || [];
       if (!Array.isArray(reg)) reg = [];
       if (reg.length === 0) {
-        const defaults = [{ name: "chief", instructions: "You are the Chief." }];
+        const defaults = [{ name: "chief", instructions: "You are the Chief. You manage a team of AI agents." }];
         for (const bot of defaults) {
           const stub = this.env.BOT.get(this.env.BOT.idFromName(bot.name));
           await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify(bot) }));
@@ -61,7 +61,7 @@ export class BotDurableObject {
     if (path === "/init") {
       const { name, instructions } = await request.json();
       this.name = name;
-      this.instructions = instructions || "You are a helpful autonomous developer.";
+      this.instructions = instructions || "You are a helpful AI.";
       await this.ctx.storage.put("name", this.name);
       await this.ctx.storage.put("instructions", this.instructions);
       return new Response("ok");
@@ -86,7 +86,7 @@ export class BotDurableObject {
       await this.ctx.storage.put("history", history.slice(-100));
       
       await this.ctx.storage.put("status", "working");
-      await this.ctx.storage.put("thoughts", ["Reading workspace..."]);
+      await this.ctx.storage.put("thoughts", ["Reading request..."]);
       await this.ctx.storage.setAlarm(Date.now() + 100);
       
       return Response.json({ ok: true, status: "working" });
@@ -124,19 +124,19 @@ export class BotDurableObject {
     const system = `You are "${this.name}".
 ${this.instructions}
 
-CRITICAL RULES:
-1. Act like a senior developer.
-2. DO NOT create a new repository unless explicitly told to.
-3. ALWAYS use github_list_files and github_read_file to inspect a repo before editing.
-4. Provide ENTIRE file contents when using github_push_file.
-5. Output ONLY ONE raw JSON object per message when using a tool.
+You are an autonomous agent. 
+If the user is just chatting or asking a simple question, reply with normal text. DO NOT use tools.
+If the user asks you to build something complex or do a big task, you can spawn specialist agents to help you.
 
 Tools (reply with raw JSON):
+- {"tool":"chat","text":"your normal reply"}
 - {"tool":"github_list_files","repo":"name"}
 - {"tool":"github_read_file","repo":"name","path":"file"}
 - {"tool":"github_push_file","repo":"name","path":"file","content":"code","message":"msg"}
 - {"tool":"github_delete_file","repo":"name","path":"file","message":"msg"}
 - {"tool":"github_create_repo","name":"name","description":"desc"}
+- {"tool":"spawn_agent","name":"agent_name","instructions":"what they do"}
+- {"tool":"delegate_task","name":"agent_name","task":"what to do"}
 
 Do NOT wrap JSON in markdown.`;
 
@@ -151,16 +151,24 @@ Do NOT wrap JSON in markdown.`;
       await this.ctx.storage.put("thoughts", thoughts);
     };
 
-    while (steps < 15) {
+    // INCREASED LIMIT FOR CONTINUOUS WORK
+    while (steps < 30) {
       const toolCall = this.parseTool(raw);
-      if (!toolCall) break; 
+      if (!toolCall) {
+        // If no tool call, just return the text
+        return raw;
+      }
       
+      if (toolCall.tool === "chat") {
+        return toolCall.text;
+      }
+
       steps++;
       await addThought(`Using ${toolCall.tool}...`);
       const result = await this.runTool(toolCall);
       await addThought(`Result: ${result.slice(0, 100)}...`);
       
-      if (result.includes("GITHUB_TOKEN is not set")) {
+      if (result.includes("GITHUB_TOKEN is not set") && toolCall.tool.includes("github_")) {
         return "Please tap the ⚙ gear icon and add your GitHub token.";
       }
 
@@ -199,6 +207,20 @@ Do NOT wrap JSON in markdown.`;
   base64ToUtf8(str) { return decodeURIComponent(escape(atob(str))); }
 
   async runTool({ tool, ...args }) {
+    if (tool === "spawn_agent") {
+      const reg = this.env.BOT.get(this.env.BOT.idFromName("registry"));
+      await reg.fetch(new Request("https://registry/register", { method: "POST", body: JSON.stringify({ name: args.name, instructions: args.instructions }) }));
+      const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
+      await stub.fetch(new Request("https://bot/init", { method: "POST", body: JSON.stringify({ name: args.name, instructions: args.instructions }) }));
+      return `Agent ${args.name} spawned successfully.`;
+    }
+
+    if (tool === "delegate_task") {
+      const stub = this.env.BOT.get(this.env.BOT.idFromName(args.name));
+      const res = await stub.fetch(new Request("https://bot/message", { method: "POST", body: JSON.stringify({ message: args.task }) }));
+      return `Task delegated to ${args.name}. They are working on it.`;
+    }
+
     if (tool.includes("github_")) {
       const token = await this.getGithubToken();
       if (!token) return "Error: GITHUB_TOKEN is not set.";
@@ -266,18 +288,13 @@ Do NOT wrap JSON in markdown.`;
 
   async askBrain(messages) {
     try {
-      // SWAPPED TO THE MOST RELIABLE LLAMA 3.3 70B MODEL
       const res = await this.env.AI.run("@cf/meta/llama-3.3-70b-instruct-fp8-fast", { messages, max_tokens: 2500 });
-      
       let out = "";
       if (res && typeof res.response === 'string') out = res.response;
       else if (res && res.choices && res.choices[0] && res.choices[0].message) out = res.choices[0].message.content;
       else if (typeof res === 'string') out = res;
       else out = JSON.stringify(res);
-      
       return out || "Empty response from AI.";
-    } catch (e) { 
-      return "Brain Error: " + e.message; 
-    }
+    } catch (e) { return "Brain Error: " + e.message; }
   }
 }
